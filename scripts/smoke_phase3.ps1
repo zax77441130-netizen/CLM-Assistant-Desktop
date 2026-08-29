@@ -117,7 +117,8 @@ try {
   $List = Invoke-Assistant (U "\u5217\u51fa\u76ee\u524d\u5de5\u4f5c\u5340\u7684\u6a94\u6848") $Workspace.id
   Assert-True ($List.state -eq "COMPLETED") "List directory did not complete."
   Assert-True ($List.resultText -match (U "\u5df2\u627e\u5230")) "List directory did not present Chinese result text."
-  Assert-True ($List.observationPreview -match "example.txt") "List directory preview did not include example.txt."
+  Assert-True ($List.resultText -match "example.txt") "List directory result did not include example.txt."
+  Assert-True ([string]::IsNullOrEmpty($List.observationPreview)) "List directory duplicated the result in observation preview."
 
   $Read = Invoke-Assistant (U "\u8b80\u53d6 example.txt") $Workspace.id
   Assert-True ($Read.state -eq "COMPLETED") "Read text did not complete."

@@ -25,6 +25,7 @@ const pages: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?:
 ];
 
 const examples = ["列出目前工作區的檔案", "讀取 example.txt", "找出重複檔案", "建立資料夾 測試建立"];
+const ACTIVE_WORKSPACE_KEY = "clm.activeWorkspaceId";
 
 export function App(): React.ReactElement {
   const [page, setPage] = useState<Page>("assistant");
@@ -113,7 +114,8 @@ function AssistantPage({ status, bridgeReady }: { status: RuntimeStatus | null; 
       return;
     }
     const workspaces = await bridge.getWorkspaces();
-    setWorkspace(workspaces[0] ?? null);
+    const activeId = window.localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+    setWorkspace(workspaces.find((item) => item.id === activeId) ?? workspaces[0] ?? null);
   };
 
   useEffect(() => {
@@ -133,6 +135,7 @@ function AssistantPage({ status, bridgeReady }: { status: RuntimeStatus | null; 
       const selected = await bridge.selectWorkspace();
       if (selected && !("cancelled" in selected)) {
         setWorkspace(selected);
+        window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, selected.id);
       }
       setError(null);
     } catch (event) {

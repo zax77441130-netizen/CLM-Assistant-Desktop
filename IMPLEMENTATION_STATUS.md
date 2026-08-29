@@ -136,6 +136,11 @@ Legend:
 - Prompt injection policy preservation: TESTED
 - Assistant cancellation endpoint: TESTED
 - Assistant Undo flow: TESTED
+- Filesystem write postconditions: TESTED
+- Workspace grant stale-root rejection: TESTED
+- Production composition uses real StructuredTaskService: TESTED
+- LIST_DIRECTORY duplicate result suppression: TESTED
+- Phase 3 write smoke with Windows Test-Path: TESTED
 - Provider settings IPC/API: TESTED
 - Renderer raw JSON/SQL/stack suppression: TESTED
 - Phase 3 migration `0004_agent_orchestration`: TESTED

@@ -82,4 +82,13 @@ Use the Assistant page to select a workspace and enter Chinese requests such as:
 
 The default provider is `本機指令模式`, which is deterministic and does not call cloud AI. OpenAI mode can be enabled in Settings after saving an API key. The key is stored through Windows Credential Manager and is never displayed back to Renderer.
 
+Filesystem write tasks are verified against the real Windows filesystem before they can complete. For example, creating a folder must pass `Test-Path`-equivalent existence, directory type, and workspace containment checks before the UI can say the task is complete or enable Undo.
+
+Run the write-side smoke from Windows PowerShell when changing workspace or file tools:
+
+```powershell
+Set-Location "C:\Users\zong\Desktop\CLM-Assistant-Desktop"
+.\scripts\smoke_phase3_write.ps1
+```
+
 Human GUI verification is still required for native folder selection, task buttons, approval cards, Undo, tray, close-to-background, and full quit behavior.

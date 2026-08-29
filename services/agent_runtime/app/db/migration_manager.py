@@ -107,7 +107,11 @@ def backup_database(settings: RuntimeSettings | None = None) -> BackupResult | N
     if not path.exists() or path.stat().st_size == 0:
         return None
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    backup_path = path.with_name(f"{path.name}.phase2_2.{stamp}.bak")
+    revision = "unversioned"
+    with contextlib.suppress(Exception), sqlite3.connect(path) as connection:
+        revision = _current_revision(connection) or identify_legacy_state(connection)
+    safe_revision = "".join(character if character.isalnum() or character in {"-", "_"} else "_" for character in revision)
+    backup_path = path.with_name(f"{path.name}.{safe_revision}.{stamp}.bak")
     shutil.copy2(path, backup_path)
     if sha256_file(path) != sha256_file(backup_path) or path.stat().st_size != backup_path.stat().st_size:
         raise MigrationError("Database backup verification failed.")

@@ -191,8 +191,7 @@ def observation_preview(observation: dict[str, Any] | None) -> str | None:
     if not observation:
         return None
     if "entries" in observation and isinstance(observation["entries"], list):
-        names = [str(item.get("path")) for item in observation["entries"][:20] if isinstance(item, dict)]
-        return "\n".join(f"• {name}" for name in names)
+        return None
     if "content" in observation:
         content = str(observation.get("content", ""))
         return content[:2000]

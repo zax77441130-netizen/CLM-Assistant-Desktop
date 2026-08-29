@@ -28,6 +28,10 @@ Approval must bind exact tool, exact arguments, argument hash, working directory
 
 Renderer and future LLM code may only reference files through `workspace_id` and relative paths. Runtime rejects path traversal, absolute paths, UNC paths, device paths, alternate data streams, reserved Windows device names, workspace escape through symlinks, same-path moves, and overwriting destinations without approval.
 
+Workspace grants are revalidated before use. If a grant is missing, disabled, points to a deleted directory, or no longer resolves to a directory, Runtime fails the task with a safe Chinese message and does not fall back to any other root.
+
+Filesystem write tools must verify side-effect postconditions before completion. A write observation must contain verified evidence for the final Windows filesystem state; otherwise the task is failed and no usable Undo is exposed.
+
 ## Diagnostics
 
 Development logs are stored locally in `.runtime/logs/`. Runtime API logs include request IDs and paths but do not include the desktop session token.

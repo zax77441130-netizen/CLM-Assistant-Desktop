@@ -18,6 +18,13 @@ Verify:
 - Run `讀取 example.txt` against a known text file.
 - Run `找出重複檔案` in a workspace with duplicate files.
 - Run `建立資料夾 測試建立`, then use Undo and confirm the folder is gone.
+- For write verification, use a unique folder name such as `真人驗證-20260830-001` and confirm with Windows PowerShell:
+
+```powershell
+Test-Path -LiteralPath "<實際工作區>\<唯一資料夾名稱>"
+```
+
+- After GUI Undo, run the same `Test-Path -LiteralPath` again and confirm it returns `False`.
 - Trigger an overwrite request and confirm it enters approval before changing the file.
 - Reject the overwrite and confirm the original file remains unchanged.
 - Send an ambiguous request and confirm the task waits for clarification.

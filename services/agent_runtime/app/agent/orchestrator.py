@@ -163,6 +163,10 @@ class ResultPresenter:
                 return "沒有找到重複檔案。", observation
             groups = len(duplicates)
             return f"找到 {groups} 組重複檔案。", observation
+        if title == "CREATE_DIRECTORY" and observation and "path" in observation:
+            return f"已在目前工作區建立「{observation['path']}」資料夾。", observation
+        if raw.get("state") == "FAILED":
+            return str(raw.get("summary") or "任務未完成，請確認工作區與檔案狀態後再試。"), observation
         if title == "OVERWRITE_TEXT" and raw.get("state") == "WAITING_APPROVAL":
             return "這會覆寫既有檔案，需要你先核准。", observation
         if raw.get("state") == "WAITING_APPROVAL":
@@ -194,8 +198,13 @@ class AgentOrchestrator:
         task = TaskIntakeService().create(db, request)
         task.state = TaskState.PLANNING
         db.commit()
-        plan = self.planner.create_plan(PlanContext(request=request.message, workspace_id=request.workspace_id, provider_mode=self.settings.get_mode()))
-        self.validator.validate(plan, request.workspace_id)
+        try:
+            plan = self.planner.create_plan(PlanContext(request=request.message, workspace_id=request.workspace_id, provider_mode=self.settings.get_mode()))
+            self.validator.validate(plan, request.workspace_id)
+        except Exception as exc:
+            task.state = TaskState.FAILED
+            db.commit()
+            return AssistantTaskResponse.from_task(task, summary=self._safe_failure_message(exc), providerMode=self.settings.get_mode())
         saved_plan = self._save_plan(db, task, plan)
         if plan.needsClarification:
             task.state = TaskState.WAITING_CLARIFICATION
@@ -222,11 +231,19 @@ class AgentOrchestrator:
             step_response = self.executor.execute(db, step, request.workspace_id)
             result_summary, observation = self.presenter.present(step_response)
             raw = step_response.model_dump(mode="json") if isinstance(step_response, BaseModel) else {}
+            if not self._step_response_verified(step, raw):
+                raw["state"] = "FAILED"
+                result_summary = "檔案系統變更未通過完成驗證，任務已停止。"
+                observation = None
             approval_id = raw.get("approval_id") or approval_id
-            undo_record_id = raw.get("undo_record_id") or undo_record_id
+            if raw.get("state") == "COMPLETED":
+                undo_record_id = raw.get("undo_record_id") or undo_record_id
             plan_step.status = str(raw.get("state") or "COMPLETED")
             plan_step.finished_at = datetime.now(UTC)
-            progress.append(f"完成：{step.reason}")
+            if raw.get("state") in {"COMPLETED", "WAITING_APPROVAL"}:
+                progress.append(f"完成：{step.reason}")
+            else:
+                progress.append(f"未完成：{step.reason}")
             if raw.get("state") == "WAITING_APPROVAL":
                 task.state = TaskState.WAITING_APPROVAL
                 break
@@ -269,3 +286,20 @@ class AgentOrchestrator:
             db.commit()
             return conversation.id
         return message.conversation_id
+
+    def _safe_failure_message(self, exc: Exception) -> str:
+        code = str(exc)
+        if code in {"WORKSPACE_REQUIRED", "WORKSPACE_NOT_FOUND", "WORKSPACE_GRANT_INVALID"}:
+            return "目前工作區授權已失效，請重新選擇工作資料夾。"
+        return "任務未完成，請確認工作區與檔案狀態後再試。"
+
+    def _step_response_verified(self, step: PlanStepSpec, raw: dict[str, Any]) -> bool:
+        if raw.get("state") != "COMPLETED":
+            return True
+        if step.tool not in {"filesystem.create_directory", "filesystem.write_new_text", "filesystem.copy", "filesystem.move", "filesystem.rename", "filesystem.overwrite_text"}:
+            return True
+        observation = raw.get("observation")
+        if not isinstance(observation, dict):
+            return False
+        postcondition = observation.get("postcondition")
+        return isinstance(postcondition, dict) and postcondition.get("verified") is True

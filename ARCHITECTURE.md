@@ -80,6 +80,10 @@ The Agent Orchestrator is intentionally layered:
 
 The allowed planner tool surface is the existing Tool Registry only: workspace file read/search/hash/duplicate/create/copy/move/rename/write-new/overwrite plus host read-only diagnostics and registered app launch. No shell, PowerShell, `cmd.exe`, arbitrary executable path, Windows UI Automation, automatic deletion, or workspace escape tool is introduced.
 
+Filesystem write tools must prove their side effects before completion. `create_directory`, `write_new_text`, `copy`, `move`, `rename`, and `overwrite_text` all re-resolve the affected path through `WorkspacePathPolicy`, verify the expected Windows filesystem state, and attach a `postcondition.verified=true` observation. Structured tasks and assistant tasks are not marked `COMPLETED` unless that postcondition is present for write operations.
+
+Workspace grants are never allowed to fall back to the current directory, AppData, project root, or a temp folder. Runtime revalidates each grant root before use and hides/marks stale deleted grants as disabled when workspaces are listed. Renderer persists the user's selected workspace id locally and restores it only if Runtime still returns that grant.
+
 The `0004_agent_orchestration` migration adds durable conversation, message, plan, plan step, clarification, and provider setting tables. Runtime continues to migrate through Alembic head on startup, including fresh databases and AppData databases already upgraded through `0003_reconcile_legacy`.
 
 ## Planner Providers

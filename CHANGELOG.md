@@ -22,3 +22,6 @@
 - Added OpenAI planner provider scaffolding using the official Responses API with strict structured output and Windows Credential Manager API key storage without plaintext fallback.
 - Added the `0004_agent_orchestration` Alembic migration for conversations, messages, plans, plan steps, clarifications, and provider settings.
 - Added Phase 3 backend, renderer, IPC, provider, migration, and Windows smoke coverage.
+- Fixed Phase 3.1 write-task false success risk by requiring real filesystem postconditions for write tools, rejecting stale workspace grants, preventing assistant write completion without verified observations, and adding a Windows `Test-Path` write smoke.
+- Fixed duplicated LIST_DIRECTORY presentation so the main result shows one Chinese list while technical details stay collapsed.
+- Renamed future migration backups from the fixed `phase2_2` suffix to revision/timestamp-based names.

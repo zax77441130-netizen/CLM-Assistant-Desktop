@@ -42,7 +42,27 @@ class StructuredTaskService:
         return grant
 
     def list_workspaces(self, db: Session) -> list[WorkspaceGrant]:
-        return list(db.scalars(select(WorkspaceGrant).order_by(WorkspaceGrant.created_at.desc())))
+        grants = list(db.scalars(select(WorkspaceGrant).order_by(WorkspaceGrant.created_at.desc())))
+        changed = False
+        active: list[WorkspaceGrant] = []
+        for grant in grants:
+            if not grant.enabled:
+                continue
+            try:
+                root = Path(grant.root_path).resolve(strict=True)
+            except OSError:
+                grant.enabled = False
+                changed = True
+                continue
+            if not root.is_dir():
+                grant.enabled = False
+                changed = True
+                continue
+            grant.root_path = str(root)
+            active.append(grant)
+        if changed:
+            db.commit()
+        return active
 
     def create_task(self, db: Session, request: StructuredTaskRequest) -> TaskResponse:
         task = Task(title=request.task_type, state=TaskState.ANALYZING)
@@ -50,33 +70,35 @@ class StructuredTaskService:
         db.flush()
         step = TaskStep(task_id=task.id, title=request.task_type, state=TaskState.RUNNING, sort_order=1)
         db.add(step)
-        normalized = self.normalize_arguments(db, request)
-        tool_name = self.tool_name_for(request.task_type)
-        action = Action(
-            task_id=task.id,
-            tool_name=tool_name,
-            arguments_hash=argument_hash(normalized),
-            risk_level=self.risk_for(request.task_type),
-            status="PLANNED",
-        )
-        db.add(action)
-        db.flush()
-        self.audit(db, "task.created", {"task_id": task.id, "tool_name": tool_name, "arguments": normalized})
-
-        if request.task_type == "OVERWRITE_TEXT":
-            return self.require_overwrite_approval(db, task, step, action, normalized)
-        if request.task_type == "LAUNCH_REGISTERED_APP":
-            action.status = "HUMAN_VERIFICATION_REQUIRED"
+        action: Action | None = None
         try:
+            normalized = self.normalize_arguments(db, request)
+            tool_name = self.tool_name_for(request.task_type)
+            action = Action(
+                task_id=task.id,
+                tool_name=tool_name,
+                arguments_hash=argument_hash(normalized),
+                risk_level=self.risk_for(request.task_type),
+                status="PLANNED",
+            )
+            db.add(action)
+            db.flush()
+            self.audit(db, "task.created", {"task_id": task.id, "tool_name": tool_name, "arguments": normalized})
+
+            if request.task_type == "OVERWRITE_TEXT":
+                return self.require_overwrite_approval(db, task, step, action, normalized)
+            if request.task_type == "LAUNCH_REGISTERED_APP":
+                action.status = "HUMAN_VERIFICATION_REQUIRED"
             result = self.execute_normalized(db, task, action, request.task_type, normalized)
             return self.complete_from_result(db, task, step, action, result)
         except Exception as exc:
-            task.state = TaskState.BLOCKED
-            action.status = "BLOCKED"
-            step.state = TaskState.BLOCKED
-            self.audit(db, "task.blocked", {"task_id": task.id, "error": str(exc)})
+            task.state = self.failure_state(exc)
+            if action is not None:
+                action.status = task.state.value
+            step.state = task.state
+            self.audit(db, "task.failed" if task.state == TaskState.FAILED else "task.blocked", {"task_id": task.id, "error": str(exc)})
             db.commit()
-            return TaskResponse(id=task.id, title=task.title, state=task.state, summary=str(exc))
+            return TaskResponse(id=task.id, title=task.title, state=task.state, summary=self.safe_failure_message(exc))
 
     def decide_approval(self, db: Session, approval_id: str, approve: bool) -> TaskResponse:
         approval = db.get(Approval, approval_id)
@@ -172,6 +194,13 @@ class StructuredTaskService:
         grant = db.get(WorkspaceGrant, workspace_id)
         if grant is None or not grant.enabled:
             raise ValueError("WORKSPACE_NOT_FOUND")
+        try:
+            root = Path(grant.root_path).resolve(strict=True)
+        except OSError as exc:
+            raise ValueError("WORKSPACE_GRANT_INVALID") from exc
+        if not root.is_dir():
+            raise ValueError("WORKSPACE_GRANT_INVALID")
+        grant.root_path = str(root)
         grant.last_used_at = datetime.now(UTC)
         return grant
 
@@ -222,22 +251,25 @@ class StructuredTaskService:
             return file_tools.find_duplicates(root, path)
         if task_type == "CREATE_DIRECTORY":
             result = file_tools.create_directory(root, path)
-            target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
-            self.create_undo(db, task, action, "CREATE_DIRECTORY", None, str(target), {}, result.observation)
+            if result.side_effect and self.postcondition_verified(result):
+                target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
+                self.create_undo(db, task, action, "CREATE_DIRECTORY", None, str(target), {}, result.observation)
             return result
         if task_type == "WRITE_NEW_TEXT":
             result = file_tools.write_new_text(root, path, content)
-            target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
-            self.create_undo(db, task, action, "WRITE_NEW_TEXT", None, str(target), {}, result.observation)
+            if self.postcondition_verified(result):
+                target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
+                self.create_undo(db, task, action, "WRITE_NEW_TEXT", None, str(target), {}, result.observation)
             return result
         if task_type in {"COPY_FILE", "MOVE_FILE", "RENAME_FILE"}:
             if not destination:
                 raise ValueError("DESTINATION_REQUIRED")
             result = file_tools.copy_file(root, path, destination) if task_type == "COPY_FILE" else file_tools.move_file(root, path, destination)
-            policy = WorkspacePathPolicy(root)
-            source_abs = policy.resolve_new_child(path).absolute_path if task_type != "COPY_FILE" else policy.resolve_existing(path).absolute_path
-            dest_abs = policy.resolve_existing(destination).absolute_path
-            self.create_undo(db, task, action, task_type, str(source_abs), str(dest_abs), {}, result.observation)
+            if self.postcondition_verified(result):
+                policy = WorkspacePathPolicy(root)
+                source_abs = policy.resolve_new_child(path).absolute_path if task_type != "COPY_FILE" else policy.resolve_existing(path).absolute_path
+                dest_abs = policy.resolve_existing(destination).absolute_path
+                self.create_undo(db, task, action, task_type, str(source_abs), str(dest_abs), {}, result.observation)
             return result
         if task_type == "SYSTEM_INFO":
             return host_tools.system_info()
@@ -281,11 +313,12 @@ class StructuredTaskService:
         backup_dir = get_settings().data_dir / "backups" / task.id
         result, backup, new_hash = file_tools.overwrite_text_with_backup(args["workspace_root"], args["path"], args.get("content") or "", args["expected_sha256"], backup_dir)
         target = WorkspacePathPolicy(args["workspace_root"]).resolve_existing(args["path"]).absolute_path
-        self.create_undo(db, task, action, "OVERWRITE_TEXT", str(target), str(target), {"sha256": args["expected_sha256"]}, {"sha256": new_hash}, backup_path=str(backup))
+        if self.postcondition_verified(result):
+            self.create_undo(db, task, action, "OVERWRITE_TEXT", str(target), str(target), {"sha256": args["expected_sha256"]}, {"sha256": new_hash}, backup_path=str(backup))
         return result
 
     def complete_from_result(self, db: Session, task: Task, step: TaskStep, action: Action, result: ToolResult, approval_id: str | None = None) -> TaskResponse:
-        verifier_ok = result.success and bool(result.evidence)
+        verifier_ok = result.success and bool(result.evidence) and self.postcondition_verified(result, action.tool_name)
         task.state = TaskState.COMPLETED if verifier_ok else TaskState.FAILED
         step.state = task.state
         action.status = task.state.value
@@ -302,6 +335,30 @@ class StructuredTaskService:
             approval_id=approval_id,
             undo_record_id=undo.id if undo else None,
         )
+
+    def postcondition_verified(self, result: ToolResult, tool_name: str | None = None) -> bool:
+        if tool_name not in {"filesystem.create_directory", "filesystem.write_new_text", "filesystem.copy", "filesystem.move", "filesystem.rename", "filesystem.overwrite_text"}:
+            return True
+        if not result.side_effect:
+            return True
+        postcondition = result.observation.get("postcondition")
+        return isinstance(postcondition, dict) and postcondition.get("verified") is True
+
+    def failure_state(self, exc: Exception) -> TaskState:
+        code = str(exc)
+        if code in {"WORKSPACE_NOT_FOUND", "WORKSPACE_GRANT_INVALID", "WORKSPACE_REQUIRED", "WORKSPACE_NOT_DIRECTORY"}:
+            return TaskState.FAILED
+        if code.startswith("POSTCONDITION_"):
+            return TaskState.FAILED
+        return TaskState.BLOCKED
+
+    def safe_failure_message(self, exc: Exception) -> str:
+        code = str(exc)
+        if code in {"WORKSPACE_NOT_FOUND", "WORKSPACE_GRANT_INVALID", "WORKSPACE_REQUIRED", "WORKSPACE_NOT_DIRECTORY"}:
+            return "目前工作區授權已失效，請重新選擇工作資料夾。"
+        if code.startswith("POSTCONDITION_"):
+            return "檔案系統變更未通過完成驗證，任務已停止。"
+        return "任務未完成，請確認工作區與檔案狀態後再試。"
 
     def create_undo(self, db: Session, task: Task, action: Action, operation: str, source: str | None, destination: str | None, precondition: dict[str, Any], postcondition: dict[str, Any], backup_path: str | None = None) -> UndoRecord:
         undo = UndoRecord(
@@ -326,6 +383,8 @@ class StructuredTaskService:
             target = Path(undo.destination)
             if target.exists() and not any(target.iterdir()):
                 target.rmdir()
+                if target.exists():
+                    raise ValueError("UNDO_POSTCONDITION_DIRECTORY_STILL_EXISTS")
             elif target.exists():
                 raise ValueError("UNDO_CONFLICT_DIRECTORY_NOT_EMPTY")
             return
@@ -334,6 +393,8 @@ class StructuredTaskService:
             expected = undo.postcondition.get("sha256")
             if target.exists() and expected and sha256_file(target) == expected:
                 target.unlink()
+                if target.exists():
+                    raise ValueError("UNDO_POSTCONDITION_FILE_STILL_EXISTS")
                 return
             raise ValueError("UNDO_CONFLICT_FILE_CHANGED")
         if undo.operation in {"MOVE_FILE", "RENAME_FILE"} and undo.source and undo.destination:
@@ -345,6 +406,8 @@ class StructuredTaskService:
             if not destination.exists() or (expected and sha256_file(destination) != expected):
                 raise ValueError("UNDO_CONFLICT_DESTINATION_CHANGED")
             shutil.move(str(destination), str(source))
+            if not source.exists() or destination.exists():
+                raise ValueError("UNDO_POSTCONDITION_MOVE_FAILED")
             return
         if undo.operation == "OVERWRITE_TEXT" and undo.source and undo.backup_path:
             target = Path(undo.source)
@@ -355,6 +418,8 @@ class StructuredTaskService:
             if expected and sha256_file(target) != expected:
                 raise ValueError("UNDO_CONFLICT_FILE_CHANGED")
             shutil.copyfile(backup, target)
+            if sha256_file(target) != undo.precondition.get("sha256"):
+                raise ValueError("UNDO_POSTCONDITION_RESTORE_FAILED")
             return
         raise ValueError("UNDO_OPERATION_UNSUPPORTED")
 
