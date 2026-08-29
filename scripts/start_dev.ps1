@@ -8,10 +8,13 @@ $VitePidFile = Join-Path $PidDir "vite.pid"
 $ElectronPidFile = Join-Path $PidDir "electron.pid"
 $ViteLog = Join-Path $LogDir "vite.log"
 $ElectronLog = Join-Path $LogDir "electron.log"
+$PreloadLog = Join-Path $LogDir "preload.log"
+$RendererLog = Join-Path $LogDir "renderer.log"
+$RuntimeApiLog = Join-Path $LogDir "runtime-api.log"
 $ViteErrLog = Join-Path $LogDir "vite.err.log"
 $ElectronErrLog = Join-Path $LogDir "electron.err.log"
 $MainFile = Join-Path $DesktopRoot "dist\main\main.js"
-$PreloadFile = Join-Path $DesktopRoot "dist\preload\preload.js"
+$PreloadFile = Join-Path $DesktopRoot "dist\preload\preload.cjs"
 $RendererIndex = Join-Path $DesktopRoot "dist\renderer\index.html"
 $ViteEntry = Join-Path $ProjectRoot "node_modules\vite\bin\vite.js"
 $ElectronExe = Join-Path $ProjectRoot "node_modules\electron\dist\electron.exe"
@@ -60,7 +63,7 @@ try {
     exit 1
   }
 
-  Remove-Item -Force $ViteLog, $ViteErrLog, $ElectronLog, $ElectronErrLog, $RuntimeState -ErrorAction SilentlyContinue
+  Remove-Item -Force $ViteLog, $ViteErrLog, $ElectronLog, $ElectronErrLog, $PreloadLog, $RendererLog, $RuntimeApiLog, $RuntimeState -ErrorAction SilentlyContinue
   $Vite = Start-Process -FilePath "node" -ArgumentList @($ViteEntry, "--host", "127.0.0.1", "--port", "5173") -WorkingDirectory $DesktopRoot -RedirectStandardOutput $ViteLog -RedirectStandardError $ViteErrLog -PassThru
   Set-Content -Path $VitePidFile -Value $Vite.Id
 

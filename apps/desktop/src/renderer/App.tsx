@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Bot, ClipboardList, Settings, Workflow } from "lucide-react";
 import type { RuntimeStatus } from "@clm/contracts";
+import { bridgeErrorMessage, getDesktopBridge, type Approval, type RegisteredApp, type TaskResult, type Workspace } from "./desktopApiClient";
 import { stateLabel, t } from "./i18n";
 import "./styles.css";
 
@@ -14,33 +15,25 @@ const pages: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?:
   { id: "settings", label: t("settings"), icon: Settings }
 ];
 
-interface Workspace {
-  id: string;
-  display_name: string;
-  display_path: string;
-  enabled: boolean;
-}
-
-interface TaskResult {
-  id: string;
-  state: string;
-  summary?: string;
-  observation?: Record<string, unknown>;
-  approval_id?: string;
-  undo_record_id?: string;
-}
-
 export function App(): React.ReactElement {
   const [page, setPage] = useState<Page>("assistant");
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [bridgeReady, setBridgeReady] = useState(false);
 
   useEffect(() => {
     const load = async () => {
+      const bridge = getDesktopBridge();
+      setBridgeReady(Boolean(bridge));
+      if (!bridge) {
+        setError(bridgeErrorMessage());
+        return;
+      }
       try {
-        setStatus(await window.clmAssistant.runtimeStatus());
+        setStatus(await bridge.getRuntimeStatus());
+        setError(null);
       } catch (event) {
-        setError(event instanceof Error ? event.message : "Runtime status failed");
+        setError(event instanceof Error ? event.message : "本機執行核心尚未就緒，請稍後再試。");
       }
     };
     void load();
@@ -73,9 +66,10 @@ export function App(): React.ReactElement {
             <h1>{pages.find((item) => item.id === page)?.label}</h1>
             <p>{t("aiNext")}</p>
           </div>
-          <RuntimePill status={status} error={error} />
+        <RuntimePill status={status} error={error} bridgeReady={bridgeReady} />
         </header>
-        {page === "assistant" && <AssistantPage status={status} />}
+        {error && <div className="notice error">{error}</div>}
+        {page === "assistant" && <AssistantPage status={status} bridgeReady={bridgeReady} />}
         {page === "tasks" && <TasksPage />}
         {page === "automations" && <AutomationsPage />}
         {page === "settings" && <SettingsPage status={status} />}
@@ -84,60 +78,140 @@ export function App(): React.ReactElement {
   );
 }
 
-function RuntimePill({ status, error }: { status: RuntimeStatus | null; error: string | null }): React.ReactElement {
+function RuntimePill({ status, error, bridgeReady }: { status: RuntimeStatus | null; error: string | null; bridgeReady: boolean }): React.ReactElement {
   if (error) {
-    return <div className="pill danger">Runtime Error</div>;
+    return <div className="pill danger">{bridgeReady ? "Runtime 錯誤" : "Bridge 未連線"}</div>;
   }
-  return <div className="pill">{status?.state ?? "starting"}</div>;
+  return <div className="pill">{status?.state === "running" ? "Runtime 正常" : "Runtime 啟動中"}</div>;
 }
 
-function AssistantPage({ status }: { status: RuntimeStatus | null }): React.ReactElement {
+function AssistantPage({ status, bridgeReady }: { status: RuntimeStatus | null; bridgeReady: boolean }): React.ReactElement {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [taskType, setTaskType] = useState("LIST_DIRECTORY");
   const [path, setPath] = useState(".");
   const [destination, setDestination] = useState("");
   const [content, setContent] = useState("");
+  const [appId, setAppId] = useState("notepad");
   const [result, setResult] = useState<TaskResult | null>(null);
+  const [tasks, setTasks] = useState<TaskResult[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
+  const [registeredApps, setRegisteredApps] = useState<RegisteredApp[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
+  const ready = bridgeReady && status?.state === "running";
+
+  const refresh = async () => {
+    const bridge = getDesktopBridge();
+    if (!bridge) {
+      setError(bridgeErrorMessage());
+      return;
+    }
+    setLoading("refresh");
+    try {
+      const [workspaceList, taskList, approvalList, apps] = await Promise.all([
+        bridge.getWorkspaces(),
+        bridge.getTasks(),
+        bridge.getApprovals(),
+        bridge.getRegisteredApps()
+      ]);
+      setWorkspace(workspaceList[0] ?? workspace);
+      setTasks(taskList);
+      setApprovals(approvalList);
+      setRegisteredApps(apps.apps ?? []);
+      setError(null);
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "重新整理失敗，請查看系統診斷紀錄。");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  useEffect(() => {
+    if (ready) {
+      void refresh();
+    }
+  }, [ready]);
 
   const selectWorkspace = async () => {
+    const bridge = getDesktopBridge();
+    if (!bridge || !ready) {
+      setError("本機執行核心尚未就緒，請稍後再試。");
+      return;
+    }
     setError(null);
-    const selected = (await window.clmAssistant.selectWorkspace()) as Workspace | null;
-    if (selected) {
-      setWorkspace(selected);
+    setLoading("selectWorkspace");
+    try {
+      const selected = await bridge.selectWorkspace();
+      if (selected && !("cancelled" in selected)) {
+        setWorkspace(selected);
+        await refresh();
+      }
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "選擇工作資料夾失敗。");
+    } finally {
+      setLoading(null);
     }
   };
 
   const runTask = async () => {
+    const bridge = getDesktopBridge();
+    if (!bridge || !ready) {
+      setError("本機執行核心尚未就緒，請稍後再試。");
+      return;
+    }
     setError(null);
+    setLoading("runTask");
     try {
       const payload = {
         task_type: taskType,
-        workspace_id: workspace?.id,
+        workspace_id: needsWorkspace(taskType) ? workspace?.id : undefined,
         path,
         destination: destination || undefined,
         content: content || undefined,
         query: content || undefined,
-        search_content: taskType === "SEARCH_FILES"
+        search_content: taskType === "SEARCH_FILES",
+        app_id: taskType === "LAUNCH_REGISTERED_APP" ? appId : undefined
       };
-      setResult((await window.clmAssistant.createStructuredTask(payload)) as TaskResult);
-    } catch {
-      setError("任務執行失敗，詳細技術資訊請查看本機 log。");
+      const nextResult = await bridge.createStructuredTask(payload);
+      setResult(nextResult);
+      await refresh();
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "任務執行失敗，詳細技術資訊請查看本機 log。");
+    } finally {
+      setLoading(null);
     }
   };
 
   const decide = async (approve: boolean) => {
+    const bridge = getDesktopBridge();
     if (!result?.approval_id) {
       return;
     }
-    setResult((await window.clmAssistant.decideApproval(result.approval_id, approve)) as TaskResult);
+    setLoading(approve ? "approve" : "reject");
+    try {
+      setResult(await bridge!.decideApproval(result.approval_id, approve));
+      await refresh();
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "核准流程失敗。");
+    } finally {
+      setLoading(null);
+    }
   };
 
   const undo = async () => {
+    const bridge = getDesktopBridge();
     if (!result?.undo_record_id) {
       return;
     }
-    setResult((await window.clmAssistant.undoAction(result.undo_record_id)) as TaskResult);
+    setLoading("undo");
+    try {
+      setResult(await bridge!.undoAction(result.undo_record_id));
+      await refresh();
+    } catch (event) {
+      setError(event instanceof Error ? event.message : "Undo 失敗。");
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
@@ -147,13 +221,20 @@ function AssistantPage({ status }: { status: RuntimeStatus | null }): React.Reac
         <textarea id="task" placeholder="描述你要在這台 Windows 主機完成的工作..." disabled />
         <div className="notice">{t("aiNext")}</div>
         <div className="workspace-row">
-          <button onClick={selectWorkspace}>{t("selectWorkspace")}</button>
+          <button disabled={!ready || loading === "selectWorkspace"} onClick={selectWorkspace}>{loading === "selectWorkspace" ? "選擇中..." : t("selectWorkspace")}</button>
+          <button disabled={!ready || loading === "refresh"} onClick={refresh}>{loading === "refresh" ? "重新整理中..." : "重新整理"}</button>
           <span>{t("currentWorkspace")}: {workspace?.display_path ?? t("noWorkspace")}</span>
         </div>
       </section>
       <section className="panel">
         <h2>{t("runtime")}</h2>
         <dl>
+          <dt>Bridge</dt>
+          <dd>{bridgeReady ? "已連線" : "未連線"}</dd>
+          <dt>IPC</dt>
+          <dd>{bridgeReady ? "正常" : "錯誤"}</dd>
+          <dt>Runtime</dt>
+          <dd>{status?.state === "running" ? "正常" : "啟動中"}</dd>
           <dt>Host</dt>
           <dd>{status?.host ?? "pending"}</dd>
           <dt>Port</dt>
@@ -168,22 +249,30 @@ function AssistantPage({ status }: { status: RuntimeStatus | null }): React.Reac
         <h2>{t("structuredTask")}</h2>
         <div className="form-grid">
           <select value={taskType} onChange={(event) => setTaskType(event.target.value)}>
-            {["LIST_DIRECTORY", "STAT_PATH", "READ_TEXT", "SEARCH_FILES", "HASH_FILE", "FIND_DUPLICATES", "CREATE_DIRECTORY", "WRITE_NEW_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "OVERWRITE_TEXT"].map((item) => (
+            {["LIST_DIRECTORY", "STAT_PATH", "READ_TEXT", "SEARCH_FILES", "HASH_FILE", "FIND_DUPLICATES", "CREATE_DIRECTORY", "WRITE_NEW_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "OVERWRITE_TEXT", "SYSTEM_INFO", "LIST_PROCESSES", "LIST_REGISTERED_APPS", "LAUNCH_REGISTERED_APP"].map((item) => (
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
           <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="relative/path.txt" />
           <input value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="destination relative path" />
           <textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="content or search query" />
-          <button disabled={!workspace} onClick={runTask}>{t("runTask")}</button>
+          {taskType === "LAUNCH_REGISTERED_APP" && (
+            <select value={appId} onChange={(event) => setAppId(event.target.value)}>
+              {(registeredApps.length > 0 ? registeredApps : [{ id: "notepad", name: "Notepad" }]).map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          )}
+          <button disabled={!ready || loading === "runTask" || (needsWorkspace(taskType) && !workspace)} onClick={runTask}>{loading === "runTask" ? "執行中..." : t("runTask")}</button>
+          <button disabled title="取消任務將於後續 Worker 取消機制啟用">取消任務（尚未啟用）</button>
         </div>
         {error && <div className="notice error">{t("error")}: {error}</div>}
         {result && (
           <div className="result-box">
             <strong>{t("result")}</strong>
             <p>{stateLabel(result.state)} · {result.summary}</p>
-            {result.approval_id && <div className="approval-card"><strong>{t("approval")}</strong><button onClick={() => decide(true)}>{t("approve")}</button><button onClick={() => decide(false)}>{t("reject")}</button></div>}
-            {result.undo_record_id && <button onClick={undo}>{t("undo")}</button>}
+            {result.approval_id && <div className="approval-card"><strong>{t("approval")}</strong><button disabled={loading === "approve"} onClick={() => decide(true)}>{loading === "approve" ? "核准中..." : t("approve")}</button><button disabled={loading === "reject"} onClick={() => decide(false)}>{loading === "reject" ? "拒絕中..." : t("reject")}</button></div>}
+            {result.undo_record_id && <button disabled={loading === "undo"} onClick={undo}>{loading === "undo" ? "復原中..." : t("undo")}</button>}
             <pre>{JSON.stringify(result.observation ?? {}, null, 2)}</pre>
           </div>
         )}
@@ -191,13 +280,19 @@ function AssistantPage({ status }: { status: RuntimeStatus | null }): React.Reac
       <section className="panel wide">
         <h2>執行時間軸</h2>
         <ol className="timeline">
-          <li>Runtime process launched by Electron Main.</li>
-          <li>Session token retained outside Renderer.</li>
-          <li>SQLite schema initialized.</li>
+          <li>Bridge：{bridgeReady ? "已連線" : "未連線"}</li>
+          <li>Runtime：{status?.state === "running" ? "正常" : "啟動中"}</li>
+          <li>Task：{result ? `${stateLabel(result.state)} ${result.summary ?? ""}` : "尚未建立"}</li>
+          {tasks.slice(0, 5).map((task) => <li key={task.id}>{stateLabel(task.state)} · {task.title ?? task.id}</li>)}
+          {approvals.slice(0, 3).map((approval) => <li key={approval.id}>核准：{approval.status} · {approval.tool_name}</li>)}
         </ol>
       </section>
     </div>
   );
+}
+
+function needsWorkspace(taskType: string): boolean {
+  return !["SYSTEM_INFO", "LIST_PROCESSES", "LIST_REGISTERED_APPS", "LAUNCH_REGISTERED_APP"].includes(taskType);
 }
 
 function TasksPage(): React.ReactElement {

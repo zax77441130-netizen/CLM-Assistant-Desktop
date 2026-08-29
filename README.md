@@ -6,6 +6,8 @@ This project is not a generic chat UI. It is the foundation for a Windows local 
 
 Phase 1 is a foundation build. It includes a real Electron shell, a real Python FastAPI sidecar runtime, SQLite initialization, Alembic migration scaffolding, secure IPC boundaries, and tests. It does not connect to a production LLM and does not claim full AI task execution.
 
+Phase 2.1 repairs the desktop end-to-end bridge for the Phase 2 tool engine. The UI now fails closed when the Preload bridge is missing, Electron Main logs bridge/runtime diagnostics, and structured task buttons route through explicit IPC methods to token-protected Runtime APIs.
+
 ## Target
 
 - Windows 10/11 x64
@@ -26,6 +28,8 @@ Run validation from Windows PowerShell:
 
 ```powershell
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\test_windows.ps1
+C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\smoke_phase2.ps1
+C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\diagnose_desktop.ps1
 ```
 
 ## Security Defaults
@@ -40,3 +44,5 @@ C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\test_windows.ps1
 ## Phase 2 Structured Tasks
 
 Use the Assistant page to select a workspace and run structured development-stage file tasks. Tools accept `workspace_id` and relative paths only. Overwrite requires approval and creates a backup-backed undo record.
+
+Human GUI verification is still required for native folder selection, task buttons, approval cards, Undo, tray, close-to-background, and full quit behavior.

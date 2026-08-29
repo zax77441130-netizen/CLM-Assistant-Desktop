@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.config import get_settings
+from app.db.schema_evolution import ensure_phase2_columns
 from app.db.session import Base, engine
 from app.models import entities as _entities  # noqa: F401
 
@@ -24,6 +25,7 @@ def health() -> dict[str, str]:
 
 def initialize_database() -> None:
     Base.metadata.create_all(bind=engine)
+    ensure_phase2_columns(engine)
 
 
 def reserve_random_port() -> int:

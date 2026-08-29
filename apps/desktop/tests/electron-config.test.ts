@@ -14,4 +14,11 @@ describe("Electron security configuration", () => {
   it("supports headless runtime smoke mode", () => {
     expect(mainSource).toContain("CLM_ELECTRON_SMOKE");
   });
+
+  it("derives preload path from the built main module location", () => {
+    expect(mainSource).toContain("import.meta.url");
+    expect(mainSource).toContain("distRoot");
+    expect(mainSource).toContain("preload.cjs");
+    expect(mainSource).not.toContain('app.getAppPath(), "dist", "preload"');
+  });
 });

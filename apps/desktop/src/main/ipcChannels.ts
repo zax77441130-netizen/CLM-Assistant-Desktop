@@ -1,12 +1,4 @@
-export const IPC_CHANNELS = {
-  runtimeStatus: "runtime:status",
-  runtimeShutdown: "runtime:shutdown",
-  selectWorkspace: "workspace:select",
-  getWorkspaces: "workspace:list",
-  createStructuredTask: "task:createStructured",
-  getApprovals: "approval:list",
-  decideApproval: "approval:decide",
-  undoAction: "undo:apply"
-} as const;
+import { DESKTOP_API_CONTRACT } from "../shared/ipcContract.js";
 
-export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
+export const IPC_CHANNELS = DESKTOP_API_CONTRACT;
+export type { IpcChannel } from "../shared/ipcContract.js";

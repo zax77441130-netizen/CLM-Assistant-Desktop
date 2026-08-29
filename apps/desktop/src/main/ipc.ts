@@ -1,12 +1,14 @@
 import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron";
 import type { RuntimeManager } from "./runtimeManager.js";
 import { IPC_CHANNELS } from "./ipcChannels.js";
+import { diagnosticsLog } from "./diagnostics.js";
 
 export { IPC_CHANNELS };
 
 export function registerIpc(runtime: RuntimeManager): void {
-  ipcMain.handle(IPC_CHANNELS.runtimeStatus, () => runtime.getStatus());
-  ipcMain.handle(IPC_CHANNELS.runtimeShutdown, async () => {
+  ipcMain.on(IPC_CHANNELS.preloadReady, (_event, payload) => diagnosticsLog("preload", `bridge-ready ${JSON.stringify(payload)}`));
+  ipcMain.handle(IPC_CHANNELS.getRuntimeStatus, () => runtime.getStatus());
+  ipcMain.handle(IPC_CHANNELS.shutdownRuntime, async () => {
     await runtime.stop();
     return runtime.getStatus();
   });
@@ -18,7 +20,7 @@ export function registerIpc(runtime: RuntimeManager): void {
     };
     const result = focused ? await dialog.showOpenDialog(focused, options) : await dialog.showOpenDialog(options);
     if (result.canceled || result.filePaths.length === 0) {
-      return null;
+      return { cancelled: true };
     }
     const rootPath = result.filePaths[0];
     return runtime.runtimeRequest("/api/workspaces", {
@@ -30,6 +32,8 @@ export function registerIpc(runtime: RuntimeManager): void {
   ipcMain.handle(IPC_CHANNELS.createStructuredTask, (_event, payload: unknown) =>
     runtime.runtimeRequest("/api/tasks/structured", { method: "POST", body: JSON.stringify(payload) })
   );
+  ipcMain.handle(IPC_CHANNELS.getTasks, () => runtime.runtimeRequest("/api/tasks"));
+  ipcMain.handle(IPC_CHANNELS.getTask, (_event, taskId: string) => runtime.runtimeRequest(`/api/tasks/${encodeURIComponent(taskId)}`));
   ipcMain.handle(IPC_CHANNELS.getApprovals, () => runtime.runtimeRequest("/api/approvals"));
   ipcMain.handle(IPC_CHANNELS.decideApproval, (_event, payload: { approvalId: string; approve: boolean }) =>
     runtime.runtimeRequest(`/api/approvals/${payload.approvalId}/decision`, {
@@ -40,4 +44,5 @@ export function registerIpc(runtime: RuntimeManager): void {
   ipcMain.handle(IPC_CHANNELS.undoAction, (_event, undoRecordId: string) =>
     runtime.runtimeRequest(`/api/undo/${undoRecordId}`, { method: "POST" })
   );
+  ipcMain.handle(IPC_CHANNELS.getRegisteredApps, () => runtime.runtimeRequest("/api/host/registered-apps"));
 }

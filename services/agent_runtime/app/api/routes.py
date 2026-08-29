@@ -8,8 +8,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.security import require_desktop_token
+from app.core import host_tools
 from app.db.session import get_db
-from app.models import Approval, WorkspaceGrant
+from app.models import Action, Approval, Observation, Task, UndoRecord, WorkspaceGrant
 from app.schemas import ApprovalDecisionRequest, ApprovalResponse, StructuredTaskRequest, TaskResponse, WorkspaceGrantCreate, WorkspaceGrantResponse
 from app.services.task_service import MockTaskService
 from app.services.structured_task_service import StructuredTaskService
@@ -74,6 +75,48 @@ def create_structured_task(payload: StructuredTaskRequest, db: Session = Depends
     return StructuredTaskService().create_task(db, payload)
 
 
+def task_response(task: Task, db: Session) -> TaskResponse:
+    action_ids = [item.id for item in db.query(Action).filter(Action.task_id == task.id).all()]
+    observation = (
+        db.query(Observation)
+        .filter(Observation.action_id.in_(action_ids))
+        .order_by(Observation.created_at.desc())
+        .first()
+        if action_ids
+        else None
+    )
+    undo = (
+        db.query(UndoRecord)
+        .filter(UndoRecord.action_id.in_(action_ids), UndoRecord.status == "PENDING")
+        .order_by(UndoRecord.created_at.desc())
+        .first()
+        if action_ids
+        else None
+    )
+    return TaskResponse(
+        id=task.id,
+        title=task.title,
+        state=task.state,
+        summary=observation.summary if observation else None,
+        observation=observation.evidence if observation else None,
+        undo_record_id=undo.id if undo else None,
+    )
+
+
+@router.get("/tasks", response_model=list[TaskResponse], dependencies=[Depends(require_desktop_token)])
+def list_tasks(db: Session = Depends(get_db)) -> list[TaskResponse]:
+    tasks = db.query(Task).order_by(Task.created_at.desc()).limit(50).all()
+    return [task_response(task, db) for task in tasks]
+
+
+@router.get("/tasks/{task_id}", response_model=TaskResponse, dependencies=[Depends(require_desktop_token)])
+def get_task(task_id: str, db: Session = Depends(get_db)) -> TaskResponse:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise ValueError("TASK_NOT_FOUND")
+    return task_response(task, db)
+
+
 @router.post("/approvals/{approval_id}/decision", response_model=TaskResponse, dependencies=[Depends(require_desktop_token)])
 def decide_approval(approval_id: str, payload: ApprovalDecisionRequest, db: Session = Depends(get_db)) -> TaskResponse:
     return StructuredTaskService().decide_approval(db, approval_id, payload.approve)
@@ -101,3 +144,8 @@ def list_approvals(db: Session = Depends(get_db)) -> list[ApprovalResponse]:
 @router.post("/undo/{undo_record_id}", response_model=TaskResponse, dependencies=[Depends(require_desktop_token)])
 def undo_action(undo_record_id: str, db: Session = Depends(get_db)) -> TaskResponse:
     return StructuredTaskService().undo(db, undo_record_id)
+
+
+@router.get("/host/registered-apps", dependencies=[Depends(require_desktop_token)])
+def get_registered_apps() -> dict[str, object]:
+    return host_tools.list_registered_apps().observation

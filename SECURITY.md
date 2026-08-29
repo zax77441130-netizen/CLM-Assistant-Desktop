@@ -8,6 +8,8 @@
 - Preload exposes only a small allowlist.
 - No generic IPC bridge exists.
 - Desktop session token is never exposed to Renderer.
+- Renderer shows a blocking Chinese error if the Preload bridge is missing instead of falling back to no-op behavior.
+- Preload is bundled as CommonJS and imports only the shared IPC contract, not Electron Main modules.
 
 ## Runtime Security
 
@@ -25,3 +27,7 @@ Approval must bind exact tool, exact arguments, argument hash, working directory
 ## Workspace Path Policy
 
 Renderer and future LLM code may only reference files through `workspace_id` and relative paths. Runtime rejects path traversal, absolute paths, UNC paths, device paths, alternate data streams, reserved Windows device names, workspace escape through symlinks, same-path moves, and overwriting destinations without approval.
+
+## Diagnostics
+
+Development logs are stored locally in `.runtime/logs/`. Runtime API logs include request IDs and paths but do not include the desktop session token.

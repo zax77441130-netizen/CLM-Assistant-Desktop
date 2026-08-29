@@ -6,6 +6,7 @@ Legend:
 - TESTED: Automated test executed successfully.
 - VERIFIED: Runtime behavior manually or system-verified.
 - BLOCKED_EXTERNAL: Needs external key, account, hardware, human GUI check, or installed dependency.
+- PARTIAL: Backend/tool structures exist, desktop end-to-end interaction failed human verification.
 - NOT_IMPLEMENTED: Intentionally absent.
 
 ## Phase 0
@@ -56,8 +57,9 @@ Legend:
 
 ## Phase 2
 
+- Desktop end-to-end interaction: PARTIAL — backend/tool structures exist, desktop end-to-end interaction previously failed human verification; Phase 2.1 automated diagnostics now pass and human re-test is required.
 - Workspace Grant: TESTED
-- Native folder picker IPC: TESTED
+- Native folder picker IPC: PARTIAL — wiring repaired and diagnostics pass; native picker still requires human Windows desktop verification.
 - WorkspacePathPolicy: TESTED
 - Path traversal rejection: TESTED
 - Absolute path rejection: TESTED
@@ -98,6 +100,10 @@ Legend:
 - Renderer generic IPC rejection: TESTED
 - Renderer session token boundary: TESTED
 - Chinese UI state mapping: TESTED
+- Renderer button wiring automated contract test: TESTED
+- Phase 2 Runtime API smoke: TESTED
+- Phase 2 Desktop Bridge diagnostics: TESTED
+- Renderer button wiring human verification: BLOCKED_EXTERNAL
 - Native folder picker human verification: BLOCKED_EXTERNAL
 - Tray human verification: BLOCKED_EXTERNAL
 - Close-to-background human verification: BLOCKED_EXTERNAL

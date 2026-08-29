@@ -12,3 +12,4 @@
 - Reworked Windows dev launcher to verify build outputs, Vite readiness, Electron survival, Agent Runtime state, logs, and tracked PID cleanup.
 - Added Phase 2 secure workspace grants, centralized path policy, structured local file tools, host read tools, approval, undo, audit, and renderer IPC/API flow.
 - Added tests for path safety, file tools, approvals, undo, audit redaction, host whitelist, IPC allowlist, and Chinese state labels.
+- Fixed Phase 2.1 desktop end-to-end wiring by correcting the Preload path, bundling Preload as CommonJS, adding a shared IPC contract, wiring Renderer client methods through Main to Runtime API, and adding desktop diagnostics/smoke scripts.

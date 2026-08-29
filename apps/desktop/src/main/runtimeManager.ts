@@ -1,9 +1,11 @@
 import { ChildProcess, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { app } from "electron";
 import { createSessionToken } from "./security.js";
 import type { RuntimeStatus } from "./runtimeTypes.js";
+import { diagnosticsLog } from "./diagnostics.js";
 
 export interface RuntimeManagerOptions {
   projectRoot: string;
@@ -34,18 +36,38 @@ export class RuntimeManager {
     if (!this.status || this.status.state !== "running") {
       throw new Error("Agent Runtime is not running.");
     }
-    const response = await fetch(`http://127.0.0.1:${this.status.port}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Desktop-Token": this.token,
-        ...(init.headers ?? {})
-      }
-    });
-    if (!response.ok) {
-      throw new Error(`Runtime API failed: ${response.status}`);
+    const requestId = randomUUID();
+    const method = init.method ?? "GET";
+    diagnosticsLog("runtime-api", `${requestId} ${method} ${path}`);
+    let response: Response;
+    try {
+      response = await fetch(`http://127.0.0.1:${this.status.port}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Desktop-Token": this.token,
+          "X-Request-ID": requestId,
+          ...(init.headers ?? {})
+        }
+      });
+    } catch (error) {
+      diagnosticsLog("runtime-api", `${requestId} fetch-error ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error("本機執行核心連線失敗，請重新啟動 Runtime。");
     }
+    if (!response.ok) {
+      const body = await response.text();
+      diagnosticsLog("runtime-api", `${requestId} http-${response.status} ${body.slice(0, 500)}`);
+      throw new Error(`本機執行核心回應錯誤：HTTP ${response.status}`);
+    }
+    diagnosticsLog("runtime-api", `${requestId} ok ${response.status}`);
     return (await response.json()) as T;
+  }
+
+  async runtimeRequestWithoutJson(path: string, init: RequestInit = {}): Promise<void> {
+    await this.runtimeRequest(path, {
+      ...init,
+      headers: init.headers
+    });
   }
 
   async start(): Promise<RuntimeStatus> {
@@ -69,6 +91,8 @@ export class RuntimeManager {
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"]
     });
+    this.child.stdout?.on("data", (chunk) => diagnosticsLog("electron", `runtime-stdout ${String(chunk).trim()}`));
+    this.child.stderr?.on("data", (chunk) => diagnosticsLog("electron", `runtime-stderr ${String(chunk).trim()}`));
 
     writeFileSync(join(this.options.dataDir, "runtime.pid"), String(this.child.pid ?? ""), "utf8");
     this.child.once("exit", () => {

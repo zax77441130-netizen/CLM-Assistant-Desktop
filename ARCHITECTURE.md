@@ -23,10 +23,25 @@ Agent Runtime is a single Python FastAPI sidecar process. It owns the local API,
 The desktop build pipeline emits:
 
 - Electron Main: `apps/desktop/dist/main/main.js`
-- Electron Preload: `apps/desktop/dist/preload/preload.js`
+- Electron Preload: `apps/desktop/dist/preload/preload.cjs`
 - Renderer: `apps/desktop/dist/renderer/index.html`
 
-Vite owns only the Renderer output. TypeScript owns Main and Preload output.
+TypeScript emits Electron Main and shared contract modules. Vite builds the Renderer and bundles Preload as CommonJS so Electron can load it under sandboxed preload rules.
+
+## Phase 2.1 Desktop Wiring
+
+The desktop API has one shared IPC contract source: `apps/desktop/src/shared/ipcContract.ts`.
+
+Renderer calls `desktopApiClient`, Preload exposes the same explicit methods through `contextBridge`, Electron Main registers matching `ipcMain.handle` handlers, and Runtime API calls are made only by Electron Main with the desktop session token.
+
+Development diagnostics write local logs under `.runtime/logs/`:
+
+- `electron.log`
+- `preload.log`
+- `renderer.log`
+- `runtime-api.log`
+
+Request IDs are logged for Runtime API correlation. The desktop session token is not logged and is not exposed to Renderer.
 
 ## Agent Core Boundaries
 
