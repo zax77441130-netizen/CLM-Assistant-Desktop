@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { RuntimeStatus } from "@clm/contracts";
 import { IPC_CHANNELS } from "../main/ipc.js";
+import type { RuntimeStatus } from "../main/runtimeTypes.js";
 
 const api = {
   runtimeStatus: (): Promise<RuntimeStatus | null> => ipcRenderer.invoke(IPC_CHANNELS.runtimeStatus),

@@ -18,6 +18,16 @@ Agent Runtime is a single Python FastAPI sidecar process. It owns the local API,
 - Renderer communicates through explicit preload APIs only.
 - Generic IPC channels are not allowed.
 
+## Desktop Build Outputs
+
+The desktop build pipeline emits:
+
+- Electron Main: `apps/desktop/dist/main/main.js`
+- Electron Preload: `apps/desktop/dist/preload/preload.js`
+- Renderer: `apps/desktop/dist/renderer/index.html`
+
+Vite owns only the Renderer output. TypeScript owns Main and Preload output.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

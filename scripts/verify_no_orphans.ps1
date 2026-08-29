@@ -3,9 +3,12 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = "C:\Users\zong\Desktop\CLM-Assistant-Desktop"
 $PidDir = Join-Path $ProjectRoot ".runtime"
 $PidFiles = @(
-  Join-Path $PidDir "vite.pid",
-  Join-Path $PidDir "electron.pid",
-  Join-Path $env:APPDATA "CLM Assistant Desktop\runtime\runtime.pid"
+  (Join-Path $PidDir "vite.pid"),
+  (Join-Path $PidDir "electron.pid"),
+  (Join-Path $PidDir "smoke\runtime.pid"),
+  (Join-Path $PidDir "sidecar-smoke\runtime.pid"),
+  (Join-Path $env:APPDATA "CLM Assistant Desktop\runtime\runtime.pid"),
+  (Join-Path $env:APPDATA "Electron\runtime\runtime.pid")
 )
 
 $Alive = @()

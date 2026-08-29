@@ -2,8 +2,8 @@ import { ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { app } from "electron";
-import type { RuntimeStatus } from "@clm/contracts";
 import { createSessionToken } from "./security.js";
+import type { RuntimeStatus } from "./runtimeTypes.js";
 
 export interface RuntimeManagerOptions {
   projectRoot: string;

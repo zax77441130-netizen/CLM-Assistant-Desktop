@@ -1,4 +1,4 @@
-import type { RuntimeStatus } from "@clm/contracts";
+import type { RuntimeStatus } from "../main/runtimeTypes";
 
 declare global {
   interface Window {

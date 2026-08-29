@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createDefaultRuntimeManager } from "./runtimeManager.js";
 import { registerIpc } from "./ipc.js";
 
+app.setName("CLM Assistant Desktop");
+
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
   app.quit();

@@ -49,7 +49,9 @@ Legend:
 - PyInstaller sidecar build: TESTED
 - Sidecar EXE smoke test: TESTED
 - Electron static/security tests: TESTED
-- Electron headless lifecycle smoke: BLOCKED_EXTERNAL
+- Electron dev launcher: TESTED
+- Electron process stays running after start_dev: TESTED
+- Electron starts Agent Runtime through Main: TESTED
 - GUI human verification: BLOCKED_EXTERNAL
 
 ## Explicitly Not Implemented In Phase 1

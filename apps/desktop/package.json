@@ -8,7 +8,8 @@
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.electron.json && vite build",
+    "clean:electron": "node -e \"const fs=require('node:fs'); for (const p of ['dist/main','dist/preload','dist/apps','dist/packages']) fs.rmSync(p,{recursive:true,force:true});\"",
+    "build": "npm run clean:electron && tsc -p tsconfig.electron.json && vite build",
     "electron": "electron dist/main/main.js",
     "build:desktop": "electron-builder --win nsis --x64"
   },
