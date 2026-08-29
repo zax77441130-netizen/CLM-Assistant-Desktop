@@ -20,7 +20,7 @@
 
 ## Approval Policy
 
-Human approval is required for destructive deletion, overwrites, irreversible batch operations, cross-workspace bulk movement, application shutdown that may lose unsaved data, install/uninstall, registry/system settings, admin elevation, external transmission, account credentials, payments, forms, and reduced system protection.
+Human approval is required for destructive deletion, overwrites, irreversible batch operations, cross-workspace bulk movement, application shutdown that may lose unsaved data, install/uninstall, registry/system settings, admin elevation, external transmission, account credentials, payments, forms, reduced system protection, and any action ExecutionPolicy marks as high risk.
 
 Approval must bind exact tool, exact arguments, argument hash, working directory, risk reason, expiration, run ID, and action ID.
 
@@ -33,6 +33,14 @@ Renderer and future LLM code may only reference files through `workspace_id` and
 Development logs are stored locally in `.runtime/logs/`. Runtime API logs include request IDs and paths but do not include the desktop session token.
 
 Runtime API exceptions are mapped to structured safe errors before they cross the Electron IPC boundary. Renderer-visible messages must not include raw SQL, SQL parameters, SQLAlchemy URLs, Python stack traces, local SQLite paths, tokens, or file contents. Detailed technical errors stay in local diagnostics with a correlation ID and redaction.
+
+## Natural Language and Provider Security
+
+Renderer sends natural language requests only through explicit Assistant IPC methods. Runtime creates a durable task, asks the configured planner for a structured plan, validates every step, and executes only registered tools through the Phase 2 StructuredTaskService.
+
+The local deterministic provider is the default and requires no secret. OpenAI mode uses a model ID configured in Settings and an API key stored through Windows Credential Manager. The key cannot be read back through IPC or status APIs, is not stored in SQLite, is not written to `.env`, and is not logged.
+
+Workspace files, README files, and model outputs are untrusted. File contents cannot change safety policy, authorize tools, or bypass workspace path validation. Cloud planning must not receive secrets, desktop tokens, or unnecessary absolute paths, and model output is never executed as a command.
 
 ## Database Maintenance
 

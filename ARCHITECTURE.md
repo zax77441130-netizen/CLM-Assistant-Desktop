@@ -60,6 +60,36 @@ The `0003_reconcile_legacy` migration backfills and rebuilds legacy SQLite table
 
 Runtime API errors are converted to structured safe payloads with a correlation ID. Raw SQL, SQL parameters, stack traces, local SQLite paths, SQLAlchemy URLs, and tokens are kept out of Renderer-visible errors.
 
+## Phase 3 Natural Language Assistant
+
+The main Assistant page is now the user-facing workflow. Users enter Chinese natural language, select a workspace, review the task plan, watch progress, approve dangerous operations, cancel waiting/running tasks, and undo the last undoable operation. The old structured file task UI is retained only under Settings, Advanced Settings, Developer Tools.
+
+Renderer never executes tools directly. It calls explicit preload methods, Electron Main forwards token-protected requests to Agent Runtime, and Runtime owns the orchestration flow:
+
+natural language request -> TaskIntakeService -> PlannerProvider -> PlanValidator -> ExecutionPolicy -> ToolExecutor -> Phase 2 StructuredTaskService -> Observation -> ResultPresenter.
+
+The Agent Orchestrator is intentionally layered:
+
+- `TaskIntakeService` creates the durable task and conversation message.
+- `PlannerProvider` produces a strict structured plan. `DeterministicPlannerProvider` is the default local command mode; `OpenAIPlannerProvider` is configurable.
+- `PlanValidator` rejects unknown tools, absolute paths, path traversal, missing workspace IDs, empty plans, and plans over 10 steps.
+- `ExecutionPolicy` auto-runs low-risk read and undoable workspace operations and requires approval for overwrites and external side-effect tools.
+- `ToolExecutor` converts validated plan steps into existing Phase 2 structured tasks.
+- `CancellationService` moves cancellable tasks to `CANCELLED` and prevents further planned work.
+- `ResultPresenter` converts tool observations into Chinese user-facing summaries.
+
+The allowed planner tool surface is the existing Tool Registry only: workspace file read/search/hash/duplicate/create/copy/move/rename/write-new/overwrite plus host read-only diagnostics and registered app launch. No shell, PowerShell, `cmd.exe`, arbitrary executable path, Windows UI Automation, automatic deletion, or workspace escape tool is introduced.
+
+The `0004_agent_orchestration` migration adds durable conversation, message, plan, plan step, clarification, and provider setting tables. Runtime continues to migrate through Alembic head on startup, including fresh databases and AppData databases already upgraded through `0003_reconcile_legacy`.
+
+## Planner Providers
+
+Local command mode requires no API key and supports deterministic Chinese commands for common file and host tasks. OpenAI mode uses the official Responses API with strict structured JSON output. Model ID is configured in the desktop settings and defaults to a configurable value, not a credential.
+
+OpenAI API keys are stored only through Windows Credential Manager by the Python sidecar. The key is never written to SQLite, `.env`, logs, IPC state, or Renderer-accessible status. Renderer can save, delete, test, and check whether a key exists, but it cannot read the full key back.
+
+Workspace file content is untrusted. Prompt injection text cannot alter policy; model output must still pass validation and execution policy. The provider prompt forbids shell commands, absolute paths, unknown tools, secret exfiltration, and policy changes based on file contents.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

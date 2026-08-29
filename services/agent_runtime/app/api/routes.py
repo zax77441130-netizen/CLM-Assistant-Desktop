@@ -8,10 +8,25 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.security import require_desktop_token
+from app.agent.planner import OpenAIPlannerProvider
+from app.agent.provider_settings import ProviderSettingsService
+from app.agent.orchestrator import AgentOrchestrator, CancellationService
 from app.core import host_tools
 from app.db.session import get_db
 from app.models import Action, Approval, Observation, Task, UndoRecord, WorkspaceGrant
-from app.schemas import ApprovalDecisionRequest, ApprovalResponse, StructuredTaskRequest, TaskResponse, WorkspaceGrantCreate, WorkspaceGrantResponse
+from app.schemas import (
+    ApprovalDecisionRequest,
+    ApprovalResponse,
+    AssistantTaskRequest,
+    AssistantTaskResponse,
+    ProviderKeyRequest,
+    ProviderSettingsResponse,
+    ProviderSettingsUpdate,
+    StructuredTaskRequest,
+    TaskResponse,
+    WorkspaceGrantCreate,
+    WorkspaceGrantResponse,
+)
 from app.services.task_service import MockTaskService
 from app.services.structured_task_service import StructuredTaskService
 
@@ -73,6 +88,16 @@ def list_workspaces(db: Session = Depends(get_db)) -> list[WorkspaceGrantRespons
 @router.post("/tasks/structured", response_model=TaskResponse, dependencies=[Depends(require_desktop_token)])
 def create_structured_task(payload: StructuredTaskRequest, db: Session = Depends(get_db)) -> TaskResponse:
     return StructuredTaskService().create_task(db, payload)
+
+
+@router.post("/assistant/tasks", response_model=AssistantTaskResponse, dependencies=[Depends(require_desktop_token)])
+def create_assistant_task(payload: AssistantTaskRequest, db: Session = Depends(get_db)) -> AssistantTaskResponse:
+    return AgentOrchestrator(settings=ProviderSettingsService(db=db)).run(db, payload)
+
+
+@router.post("/assistant/tasks/{task_id}/cancel", response_model=AssistantTaskResponse, dependencies=[Depends(require_desktop_token)])
+def cancel_assistant_task(task_id: str, db: Session = Depends(get_db)) -> AssistantTaskResponse:
+    return CancellationService().cancel(db, task_id)
 
 
 def task_response(task: Task, db: Session) -> TaskResponse:
@@ -149,3 +174,41 @@ def undo_action(undo_record_id: str, db: Session = Depends(get_db)) -> TaskRespo
 @router.get("/host/registered-apps", dependencies=[Depends(require_desktop_token)])
 def get_registered_apps() -> dict[str, object]:
     return host_tools.list_registered_apps().observation
+
+
+@router.get("/provider/settings", response_model=ProviderSettingsResponse, dependencies=[Depends(require_desktop_token)])
+def get_provider_settings(db: Session = Depends(get_db)) -> ProviderSettingsResponse:
+    service = ProviderSettingsService(db=db)
+    return ProviderSettingsResponse(mode=service.get_mode(), model=service.get_model(), apiKeyConfigured=service.api_key_configured())
+
+
+@router.patch("/provider/settings", response_model=ProviderSettingsResponse, dependencies=[Depends(require_desktop_token)])
+def update_provider_settings(payload: ProviderSettingsUpdate, db: Session = Depends(get_db)) -> ProviderSettingsResponse:
+    service = ProviderSettingsService(db=db)
+    if payload.mode is not None:
+        service.set_mode(payload.mode)
+    if payload.model is not None:
+        service.set_model(payload.model)
+    return ProviderSettingsResponse(mode=service.get_mode(), model=service.get_model(), apiKeyConfigured=service.api_key_configured())
+
+
+@router.put("/provider/openai-key", response_model=ProviderSettingsResponse, dependencies=[Depends(require_desktop_token)])
+def save_provider_key(payload: ProviderKeyRequest, db: Session = Depends(get_db)) -> ProviderSettingsResponse:
+    service = ProviderSettingsService(db=db)
+    service.set_api_key(payload.api_key)
+    return ProviderSettingsResponse(mode=service.get_mode(), model=service.get_model(), apiKeyConfigured=service.api_key_configured())
+
+
+@router.delete("/provider/openai-key", response_model=ProviderSettingsResponse, dependencies=[Depends(require_desktop_token)])
+def delete_provider_key(db: Session = Depends(get_db)) -> ProviderSettingsResponse:
+    service = ProviderSettingsService(db=db)
+    service.delete_api_key()
+    return ProviderSettingsResponse(mode=service.get_mode(), model=service.get_model(), apiKeyConfigured=service.api_key_configured())
+
+
+@router.post("/provider/test", dependencies=[Depends(require_desktop_token)])
+def test_provider(db: Session = Depends(get_db)) -> dict[str, object]:
+    service = ProviderSettingsService(db=db)
+    if service.get_mode() == "local":
+        return {"ok": True, "message": "本機指令模式可用。"}
+    return {"ok": OpenAIPlannerProvider(service).test_connection(), "message": "OpenAI API Key 已設定。" if service.api_key_configured() else "尚未設定 OpenAI API Key。"}

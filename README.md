@@ -10,6 +10,8 @@ Phase 2.1 repairs the desktop end-to-end bridge for the Phase 2 tool engine. The
 
 Phase 2.2 makes Runtime database migration authoritative. Agent Runtime upgrades SQLite through Alembic on startup, backs up existing databases before migration, reconciles legacy Phase 1/2/2.1 schemas, and fails closed if the schema cannot be identified safely.
 
+Phase 3 turns the main page into a Chinese natural language assistant. Users can ask for common workspace tasks in plain Chinese; Runtime plans the task, validates it against the registered tool surface, routes execution through the Phase 2 Tool SDK, requests approval for dangerous operations, and presents Chinese results. The deterministic local command mode works without an API key.
+
 ## Target
 
 - Windows 10/11 x64
@@ -31,6 +33,7 @@ Run validation from Windows PowerShell:
 ```powershell
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\test_windows.ps1
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\smoke_phase2.ps1
+C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\smoke_phase3.ps1
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\diagnose_desktop.ps1
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\diagnose_database.ps1
 ```
@@ -59,6 +62,24 @@ The migration script automatically targets `%APPDATA%\CLM Assistant Desktop\runt
 
 ## Phase 2 Structured Tasks
 
-Use the Assistant page to select a workspace and run structured development-stage file tasks. Tools accept `workspace_id` and relative paths only. Overwrite requires approval and creates a backup-backed undo record.
+Structured file tasks are now a developer and diagnostics surface under Settings, Advanced Settings, Developer Tools. Tools accept `workspace_id` and relative paths only. Overwrite requires approval and creates a backup-backed undo record.
+
+## Phase 3 Natural Language Tasks
+
+Use the Assistant page to select a workspace and enter Chinese requests such as:
+
+- `列出目前工作區的檔案`
+- `讀取 example.txt`
+- `搜尋包含 關鍵字 的檔案`
+- `找出重複檔案`
+- `建立資料夾 測試建立`
+- `複製 source.txt 到 copied.txt`
+- `移動 source.txt 到 folder\source.txt`
+- `將 old.txt 重新命名為 new.txt`
+- `查看系統資訊`
+- `查看目前程序`
+- `查看可以開啟的應用程式`
+
+The default provider is `本機指令模式`, which is deterministic and does not call cloud AI. OpenAI mode can be enabled in Settings after saving an API key. The key is stored through Windows Credential Manager and is never displayed back to Renderer.
 
 Human GUI verification is still required for native folder selection, task buttons, approval cards, Undo, tray, close-to-background, and full quit behavior.

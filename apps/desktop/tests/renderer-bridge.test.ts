@@ -17,12 +17,19 @@ describe("renderer desktop bridge handling", () => {
         selectWorkspace: async () => ({ cancelled: true }),
         getWorkspaces: async () => [],
         createStructuredTask: async () => ({ id: "task", state: "COMPLETED" }),
+        createAssistantTask: async () => ({ id: "task", state: "COMPLETED", providerMode: "local", progress: [] }),
+        cancelAssistantTask: async () => ({ id: "task", state: "CANCELLED", providerMode: "local", progress: [] }),
         getTasks: async () => [],
         getTask: async () => ({ id: "task", state: "COMPLETED" }),
         getApprovals: async () => [],
         decideApproval: async () => ({ id: "task", state: "BLOCKED" }),
         undoAction: async () => ({ id: "task", state: "COMPLETED" }),
-        getRegisteredApps: async () => ({ apps: [] })
+        getRegisteredApps: async () => ({ apps: [] }),
+        getProviderSettings: async () => ({ mode: "local", model: "gpt-5.6-luna", apiKeyConfigured: false }),
+        updateProviderSettings: async () => ({ mode: "local", model: "gpt-5.6-luna", apiKeyConfigured: false }),
+        saveProviderKey: async () => ({ mode: "openai", model: "gpt-5.6-luna", apiKeyConfigured: true }),
+        deleteProviderKey: async () => ({ mode: "local", model: "gpt-5.6-luna", apiKeyConfigured: false }),
+        testProvider: async () => ({ ok: true, message: "本機指令模式可用。" })
       }
     });
     expect(getDesktopBridge()).not.toBeNull();

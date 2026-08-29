@@ -18,6 +18,31 @@ export interface TaskResult {
   undo_record_id?: string;
 }
 
+export interface AssistantTaskResult {
+  id: string;
+  state: string;
+  providerMode: string;
+  summary?: string;
+  resultText?: string;
+  observationPreview?: string;
+  plan?: {
+    goal: string;
+    needsClarification: boolean;
+    clarificationQuestion?: string;
+    steps: Array<{ title: string; reason: string; status: string }>;
+  };
+  progress: string[];
+  technicalDetails?: Record<string, unknown>;
+  approval_id?: string;
+  undo_record_id?: string;
+}
+
+export interface ProviderSettings {
+  mode: "local" | "openai";
+  model: string;
+  apiKeyConfigured: boolean;
+}
+
 export interface Approval {
   id: string;
   task_id: string;
@@ -40,12 +65,19 @@ export type DesktopBridge = {
   selectWorkspace: () => Promise<Workspace | { cancelled: true } | null>;
   getWorkspaces: () => Promise<Workspace[]>;
   createStructuredTask: (payload: unknown) => Promise<TaskResult>;
+  createAssistantTask: (payload: unknown) => Promise<AssistantTaskResult>;
+  cancelAssistantTask: (taskId: string) => Promise<AssistantTaskResult>;
   getTasks: () => Promise<TaskResult[]>;
   getTask: (taskId: string) => Promise<TaskResult>;
   getApprovals: () => Promise<Approval[]>;
   decideApproval: (approvalId: string, approve: boolean) => Promise<TaskResult>;
   undoAction: (undoRecordId: string) => Promise<TaskResult>;
   getRegisteredApps: () => Promise<{ apps: RegisteredApp[] }>;
+  getProviderSettings: () => Promise<ProviderSettings>;
+  updateProviderSettings: (payload: Partial<ProviderSettings>) => Promise<ProviderSettings>;
+  saveProviderKey: (apiKey: string) => Promise<ProviderSettings>;
+  deleteProviderKey: () => Promise<ProviderSettings>;
+  testProvider: () => Promise<{ ok: boolean; message: string }>;
 };
 
 export function getDesktopBridge(): DesktopBridge | null {

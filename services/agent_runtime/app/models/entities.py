@@ -20,11 +20,15 @@ def now_utc() -> datetime:
 
 
 class TaskState(str, enum.Enum):
+    CREATED = "CREATED"
+    PLANNING = "PLANNING"
+    WAITING_CLARIFICATION = "WAITING_CLARIFICATION"
     RECEIVED = "RECEIVED"
     ANALYZING = "ANALYZING"
     NEEDS_INPUT = "NEEDS_INPUT"
     PLANNED = "PLANNED"
     RUNNING = "RUNNING"
+    CANCELLING = "CANCELLING"
     WAITING_APPROVAL = "WAITING_APPROVAL"
     VERIFYING = "VERIFYING"
     COMPLETED = "COMPLETED"
@@ -159,3 +163,71 @@ class ScheduledTask(Base):
     task_template: Mapped[dict[str, Any]] = mapped_column(JSON)
     cron: Mapped[str] = mapped_column(String(120))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    title: Mapped[str] = mapped_column(String(240))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    role: Mapped[str] = mapped_column(String(40))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class Plan(Base):
+    __tablename__ = "plans"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    goal: Mapped[str] = mapped_column(Text)
+    provider: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(40), default="CREATED")
+    needs_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
+    clarification_question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class PlanStep(Base):
+    __tablename__ = "plan_steps"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    plan_id: Mapped[str] = mapped_column(ForeignKey("plans.id"))
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    sort_order: Mapped[int] = mapped_column(Integer)
+    tool_name: Mapped[str] = mapped_column(String(160))
+    arguments: Mapped[dict[str, Any]] = mapped_column(JSON)
+    reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(40), default="CREATED")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Clarification(Base):
+    __tablename__ = "clarifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="WAITING")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProviderSetting(Base):
+    __tablename__ = "provider_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

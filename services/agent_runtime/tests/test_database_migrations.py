@@ -122,7 +122,7 @@ def test_phase1_legacy_database_upgrades_to_head_and_keeps_rows(tmp_path: Path) 
     migrate_to_head(settings(tmp_path))
     after = {table: row_count(db_path(tmp_path), table) for table in before}
     assert before == after
-    assert revision(db_path(tmp_path)) == "0003_reconcile_legacy"
+    assert revision(db_path(tmp_path)) == "0004_agent_orchestration"
     assert collect_diagnostics(settings(tmp_path)).issues == []
 
 
@@ -137,7 +137,7 @@ def test_phase2_1_partial_database_adds_undo_created_at(tmp_path: Path) -> None:
 def test_phase2_legacy_without_alembic_version_is_baselined(tmp_path: Path) -> None:
     phase2_partial_schema(db_path(tmp_path), with_created_at=True)
     migrate_to_head(settings(tmp_path))
-    assert revision(db_path(tmp_path)) == "0003_reconcile_legacy"
+    assert revision(db_path(tmp_path)) == "0004_agent_orchestration"
     assert collect_diagnostics(settings(tmp_path)).issues == []
 
 

@@ -120,10 +120,33 @@ Legend:
 
 - Human Windows desktop verification: BLOCKED_EXTERNAL — waiting for human Windows desktop verification
 
+## Phase 3
+
+- Natural language Assistant home: TESTED
+- Structured task developer panel relocation: TESTED
+- System diagnostics relocation: IMPLEMENTED
+- TaskIntakeService: TESTED
+- DeterministicPlannerProvider local command mode: TESTED
+- OpenAIPlannerProvider strict structured output integration: IMPLEMENTED
+- Windows Credential Manager API key storage: TESTED_WITH_FAKE
+- PlanValidator strict tool/path/step checks: TESTED
+- ExecutionPolicy high-risk approval routing: TESTED
+- ToolExecutor through Phase 2 Tool SDK: TESTED
+- ResultPresenter Chinese summaries: TESTED
+- Prompt injection policy preservation: TESTED
+- Assistant cancellation endpoint: TESTED
+- Assistant Undo flow: TESTED
+- Provider settings IPC/API: TESTED
+- Renderer raw JSON/SQL/stack suppression: TESTED
+- Phase 3 migration `0004_agent_orchestration`: TESTED
+- Phase 3 Runtime API smoke: TESTED
+- OpenAI live connection: BLOCKED_EXTERNAL — requires user-provided OpenAI API key
+- Human Windows desktop verification: BLOCKED_EXTERNAL — waiting for human Windows desktop verification
+
 ## Explicitly Not Implemented In Phase 1
 
 - Production OpenAI API integration: NOT_IMPLEMENTED
 - Windows UI Automation: NOT_IMPLEMENTED
 - Broad tool execution: NOT_IMPLEMENTED
-- Full observation/replan loop: NOT_IMPLEMENTED
+- Full autonomous observation/replan loop beyond bounded single-pass MVP: NOT_IMPLEMENTED
 - Installer/updater: NOT_IMPLEMENTED
