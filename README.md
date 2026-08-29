@@ -8,6 +8,8 @@ Phase 1 is a foundation build. It includes a real Electron shell, a real Python 
 
 Phase 2.1 repairs the desktop end-to-end bridge for the Phase 2 tool engine. The UI now fails closed when the Preload bridge is missing, Electron Main logs bridge/runtime diagnostics, and structured task buttons route through explicit IPC methods to token-protected Runtime APIs.
 
+Phase 2.2 makes Runtime database migration authoritative. Agent Runtime upgrades SQLite through Alembic on startup, backs up existing databases before migration, reconciles legacy Phase 1/2/2.1 schemas, and fails closed if the schema cannot be identified safely.
+
 ## Target
 
 - Windows 10/11 x64
@@ -30,7 +32,21 @@ Run validation from Windows PowerShell:
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\test_windows.ps1
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\smoke_phase2.ps1
 C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\diagnose_desktop.ps1
+C:\Users\zong\Desktop\CLM-Assistant-Desktop\scripts\diagnose_database.ps1
 ```
+
+Diagnose or migrate the Runtime database from Windows PowerShell:
+
+```powershell
+Set-Location "C:\Users\zong\Desktop\CLM-Assistant-Desktop"
+.\scripts\stop_dev.ps1
+.\scripts\verify_no_orphans.ps1
+.\scripts\diagnose_database.ps1
+.\scripts\migrate_runtime_database.ps1 -WhatIf
+.\scripts\migrate_runtime_database.ps1
+```
+
+The migration script automatically targets `%APPDATA%\CLM Assistant Desktop\runtime\clm_assistant.sqlite3`, creates a timestamped `.bak` beside the database, verifies SHA-256 and size, upgrades to Alembic head, and prints schema diagnostics without row contents.
 
 ## Security Defaults
 

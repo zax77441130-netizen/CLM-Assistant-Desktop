@@ -43,6 +43,23 @@ Development diagnostics write local logs under `.runtime/logs/`:
 
 Request IDs are logged for Runtime API correlation. The desktop session token is not logged and is not exposed to Renderer.
 
+## Phase 2.2 Runtime Database Migration
+
+Agent Runtime uses Alembic `upgrade head` during startup. `Base.metadata.create_all()` is not used as a schema upgrade path because it cannot safely reconcile existing SQLite tables.
+
+Startup migration is guarded by a filesystem lock in the Runtime data directory so only one Runtime process can migrate a database at a time on Windows. Existing non-empty SQLite databases are copied to a timestamped `.bak` file before migration, and the copy is verified by size and SHA-256 before schema changes continue.
+
+Legacy databases without `alembic_version` are identified from SQLite metadata before baselining:
+
+- empty database: upgrade from base
+- Phase 1 create_all schema: stamp `0001_initial`, then upgrade
+- Phase 2 / Phase 2.1 legacy schema: stamp `0002_workspace_tool`, then run reconciliation
+- unknown or inconsistent schema: fail closed and keep the backup
+
+The `0003_reconcile_legacy` migration backfills and rebuilds legacy SQLite tables so `approvals` and `undo_records` match the current ORM shape, including `undo_records.created_at` and `task_id` foreign keys.
+
+Runtime API errors are converted to structured safe payloads with a correlation ID. Raw SQL, SQL parameters, stack traces, local SQLite paths, SQLAlchemy URLs, and tokens are kept out of Renderer-visible errors.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

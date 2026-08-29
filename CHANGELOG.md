@@ -13,3 +13,6 @@
 - Added Phase 2 secure workspace grants, centralized path policy, structured local file tools, host read tools, approval, undo, audit, and renderer IPC/API flow.
 - Added tests for path safety, file tools, approvals, undo, audit redaction, host whitelist, IPC allowlist, and Chinese state labels.
 - Fixed Phase 2.1 desktop end-to-end wiring by correcting the Preload path, bundling Preload as CommonJS, adding a shared IPC contract, wiring Renderer client methods through Main to Runtime API, and adding desktop diagnostics/smoke scripts.
+- Fixed Phase 2.2 legacy runtime database migration by replacing startup `create_all()` upgrades with Alembic `upgrade head`, adding legacy schema baselining, timestamped verified backups, a Windows-safe migration lock, and a reconciliation migration for `undo_records.created_at`, nullable legacy columns, and missing task foreign keys.
+- Added database diagnosis and migration scripts plus regression tests for empty databases, Phase 1/2/2.1 legacy schemas, missing `alembic_version`, inconsistent schemas, idempotency, row preservation, ORM query compatibility, API smoke, correlation IDs, migration locking, and backup failure safety.
+- Sanitized Runtime and Electron error boundaries so Renderer-visible errors no longer expose raw SQL, SQLAlchemy details, stack traces, local SQLite paths, or tokens.

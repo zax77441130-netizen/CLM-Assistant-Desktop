@@ -84,6 +84,12 @@ $RuntimeApiLog = Join-Path $LogDir "runtime-api.log"
 if (Test-Path $RuntimeApiLog) {
   $RecentApiFailure = Get-Content $RuntimeApiLog -Tail 80 | Select-String -Pattern "http-5\d\d|fetch-error" -Quiet
   Show-Check "Runtime API recent errors" (-not $RecentApiFailure)
+  $ApiLog = Get-Content $RuntimeApiLog -Tail 120
+  foreach ($ApiPath in @("/api/workspaces", "/api/tasks", "/api/approvals", "/api/host/registered-apps")) {
+    $PathRequest = $ApiLog | Select-String -SimpleMatch $ApiPath -Quiet
+    $PathOk = $ApiLog | Select-String -Pattern "ok 200" -Quiet
+    Show-Check "$ApiPath" ($PathRequest -and $PathOk) "via main-process token boundary"
+  }
 }
 
 Show-LogTail "electron"

@@ -31,3 +31,19 @@ Renderer and future LLM code may only reference files through `workspace_id` and
 ## Diagnostics
 
 Development logs are stored locally in `.runtime/logs/`. Runtime API logs include request IDs and paths but do not include the desktop session token.
+
+Runtime API exceptions are mapped to structured safe errors before they cross the Electron IPC boundary. Renderer-visible messages must not include raw SQL, SQL parameters, SQLAlchemy URLs, Python stack traces, local SQLite paths, tokens, or file contents. Detailed technical errors stay in local diagnostics with a correlation ID and redaction.
+
+## Database Maintenance
+
+Runtime database migration is local-only and backup-first. Before any schema-changing maintenance, stop the dev stack and confirm no tracked Runtime, Vite, or Electron process is still alive:
+
+```powershell
+Set-Location "C:\Users\zong\Desktop\CLM-Assistant-Desktop"
+.\scripts\stop_dev.ps1
+.\scripts\verify_no_orphans.ps1
+.\scripts\migrate_runtime_database.ps1 -WhatIf
+.\scripts\migrate_runtime_database.ps1
+```
+
+The migration path never deletes, recreates, or clears the original SQLite database. Unknown legacy schemas fail closed after backup and require manual diagnosis.

@@ -8,14 +8,19 @@ from datetime import UTC, datetime
 import uvicorn
 from fastapi import FastAPI
 
+from app.api.errors import DATABASE_EXCEPTIONS, database_exception_handler, unhandled_exception_handler
 from app.api.routes import router
 from app.config import get_settings
-from app.db.schema_evolution import ensure_phase2_columns
-from app.db.session import Base, engine
+from app.core.diagnostics import configure_runtime_logging
+from app.db.migration_manager import assert_database_ready, migrate_to_head
+from app.db.session import engine
 from app.models import entities as _entities  # noqa: F401
 
 app = FastAPI(title="CLM Assistant Agent Runtime", version="0.1.0")
 app.include_router(router, prefix="/api")
+for exception_class in DATABASE_EXCEPTIONS:
+    app.add_exception_handler(exception_class, database_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
 @app.get("/health")
@@ -24,8 +29,8 @@ def health() -> dict[str, str]:
 
 
 def initialize_database() -> None:
-    Base.metadata.create_all(bind=engine)
-    ensure_phase2_columns(engine)
+    migrate_to_head()
+    assert_database_ready(engine)
 
 
 def reserve_random_port() -> int:
@@ -50,6 +55,7 @@ def write_state_file(port: int) -> None:
 
 
 def run() -> None:
+    configure_runtime_logging()
     initialize_database()
     port = reserve_random_port()
     os.environ["CLM_RUNTIME_PORT"] = str(port)

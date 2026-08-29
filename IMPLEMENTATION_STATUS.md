@@ -28,7 +28,8 @@ Legend:
 - Python Agent Runtime: IMPLEMENTED
 - Runtime health/status endpoints: IMPLEMENTED
 - SQLite initialization: IMPLEMENTED
-- Alembic migration scaffold: IMPLEMENTED
+- Alembic startup migration: TESTED
+- Legacy SQLite reconciliation: TESTED
 - Core data models: IMPLEMENTED
 - Graceful shutdown endpoint: IMPLEMENTED
 - Single instance handling: IMPLEMENTED
@@ -103,11 +104,21 @@ Legend:
 - Renderer button wiring automated contract test: TESTED
 - Phase 2 Runtime API smoke: TESTED
 - Phase 2 Desktop Bridge diagnostics: TESTED
+- Phase 2.2 AppData database migration: TESTED
+- Phase 2.2 legacy migration fixtures: TESTED
+- Renderer raw SQL error suppression: TESTED
+- Runtime diagnostic correlation ID: TESTED
+- Runtime migration lock: TESTED
+- LIST_DIRECTORY AppData API smoke: TESTED
 - Renderer button wiring human verification: BLOCKED_EXTERNAL
 - Native folder picker human verification: BLOCKED_EXTERNAL
 - Tray human verification: BLOCKED_EXTERNAL
 - Close-to-background human verification: BLOCKED_EXTERNAL
 - Full quit human verification: BLOCKED_EXTERNAL
+
+## Phase 2.2 External Verification
+
+- Human Windows desktop verification: BLOCKED_EXTERNAL — waiting for human Windows desktop verification
 
 ## Explicitly Not Implemented In Phase 1
 

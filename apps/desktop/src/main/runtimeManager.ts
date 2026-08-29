@@ -57,7 +57,7 @@ export class RuntimeManager {
     if (!response.ok) {
       const body = await response.text();
       diagnosticsLog("runtime-api", `${requestId} http-${response.status} ${body.slice(0, 500)}`);
-      throw new Error(`本機執行核心回應錯誤：HTTP ${response.status}`);
+      throw new Error(safeRuntimeErrorMessage(body, response.status));
     }
     diagnosticsLog("runtime-api", `${requestId} ok ${response.status}`);
     return (await response.json()) as T;
@@ -144,6 +144,26 @@ export class RuntimeManager {
     }
     throw new Error("Agent Runtime did not start within 15 seconds");
   }
+}
+
+interface RuntimeErrorPayload {
+  error?: {
+    message?: string;
+    correlationId?: string;
+  };
+}
+
+export function safeRuntimeErrorMessage(body: string, status: number): string {
+  try {
+    const parsed = JSON.parse(body) as RuntimeErrorPayload;
+    if (parsed.error?.message) {
+      const suffix = parsed.error.correlationId ? `（診斷代碼：${parsed.error.correlationId}）` : "";
+      return `${parsed.error.message}${suffix}`;
+    }
+  } catch {
+    diagnosticsLog("runtime-api", `safe-error-parse-failed status=${status}`);
+  }
+  return `本機執行核心暫時無法完成請求，請重新整理或重新啟動 Runtime。`;
 }
 
 export function createDefaultRuntimeManager(): RuntimeManager {
