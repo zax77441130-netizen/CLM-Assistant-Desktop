@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "types": ["node", "electron"],
+    "baseUrl": ".",
+    "paths": {
+      "@clm/contracts": ["../../packages/contracts/src/index.ts"]
+    }
+  },
+  "include": ["src/main", "src/preload"]
+}

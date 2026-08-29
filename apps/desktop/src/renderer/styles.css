@@ -1,0 +1,159 @@
+:root {
+  color: #1b1d21;
+  background: #eef2f5;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #17202a;
+  color: #f8fafc;
+  padding: 24px 16px;
+}
+
+.brand {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 28px;
+}
+
+.brand span {
+  color: #a7b2c1;
+  font-size: 13px;
+}
+
+nav {
+  display: grid;
+  gap: 8px;
+}
+
+nav button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #cdd6e3;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  text-align: left;
+}
+
+nav button.active,
+nav button:hover {
+  background: #263445;
+  color: #ffffff;
+}
+
+.content {
+  padding: 28px;
+}
+
+.topbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
+.topbar p {
+  color: #596273;
+  margin-bottom: 0;
+}
+
+.pill {
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 8px 12px;
+}
+
+.pill.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d6dde6;
+  padding: 18px;
+}
+
+.panel.primary {
+  min-height: 280px;
+}
+
+.panel.wide {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+textarea {
+  border: 1px solid #c9d3df;
+  box-sizing: border-box;
+  min-height: 150px;
+  padding: 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.notice {
+  background: #fff7ed;
+  color: #9a3412;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  row-gap: 10px;
+}
+
+dt {
+  color: #5b6472;
+}
+
+dd {
+  margin: 0;
+}
+
+.timeline {
+  margin-bottom: 0;
+}

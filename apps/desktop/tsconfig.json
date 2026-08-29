@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "types": ["vite/client", "vitest/globals", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@clm/contracts": ["../../packages/contracts/src/index.ts"]
+    }
+  },
+  "include": ["src/renderer", "src/preload/global.d.ts", "tests"]
+}

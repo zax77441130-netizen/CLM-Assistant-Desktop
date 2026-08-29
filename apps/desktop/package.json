@@ -1,0 +1,51 @@
+{
+  "name": "@clm/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.electron.json && vite build",
+    "electron": "electron dist/main/main.js",
+    "build:desktop": "electron-builder --win nsis --x64"
+  },
+  "dependencies": {
+    "@clm/contracts": "0.1.0",
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "vitest": "latest",
+    "jsdom": "latest",
+    "typescript": "5.5.4"
+  },
+  "build": {
+    "appId": "studio.clm.assistant",
+    "productName": "CLM Assistant Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../services/agent_runtime/dist",
+        "to": "agent_runtime",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}
