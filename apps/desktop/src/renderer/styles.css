@@ -13,6 +13,37 @@ textarea {
   font: inherit;
 }
 
+input,
+select {
+  border: 1px solid #c9d3df;
+  box-sizing: border-box;
+  min-height: 38px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.workspace-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-grid textarea {
+  grid-column: 1 / -1;
+  min-height: 92px;
+}
+
+.form-grid button {
+  max-width: 180px;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -138,6 +169,34 @@ textarea {
   color: #9a3412;
   margin-top: 12px;
   padding: 10px 12px;
+}
+
+.notice.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.result-box {
+  border-top: 1px solid #d6dde6;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.approval-card {
+  align-items: center;
+  background: #fff7ed;
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 10px;
+}
+
+pre {
+  background: #111827;
+  color: #d1fae5;
+  max-height: 220px;
+  overflow: auto;
+  padding: 12px;
 }
 
 dl {

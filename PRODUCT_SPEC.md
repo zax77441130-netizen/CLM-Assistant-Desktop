@@ -26,6 +26,25 @@ Not implemented in this phase:
 - Full observation/replan loop.
 - Production installer and updater.
 
+## Phase 2 Scope
+
+Implemented:
+
+- User-selected Workspace Grant.
+- Relative-path-only structured file tasks.
+- Centralized WorkspacePathPolicy.
+- Read and write file tools with audit evidence.
+- Approval-required overwrite flow.
+- Undo journal for reversible file operations.
+- Basic Windows host read tools and registered app whitelist with mock launch validation.
+
+Not implemented:
+
+- Natural language planning.
+- Production LLM execution.
+- Windows UI Automation.
+- Unrestricted command execution.
+
 ## Completion Rules
 
 A task cannot be marked completed solely because a process exits with code `0`. Completion requires all required actions to finish, verifier success, inspectable evidence, target state confirmation, and no unresolved high-risk operation.

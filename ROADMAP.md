@@ -21,6 +21,7 @@
 - Safe PowerShell executor.
 - Approval binding and undo journal.
 - Observation sanitizer.
+Status: file tools, host read tools, approval binding, and undo journal are implemented. Safe PowerShell executor remains future work.
 
 ## Phase 3: Agent Reasoning
 

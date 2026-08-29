@@ -25,3 +25,5 @@ Every execution must return:
 - undo record reference when available
 
 The future PowerShell executor must use explicit executable and arguments with `shell=false`, working directory restrictions, timeout, output size limit, environment allowlist, dangerous pattern detection, risk classification, approval policy, and process tree cleanup.
+
+Phase 2 implements the contract for local filesystem and host whitelist tools. It does not expose raw shell execution.

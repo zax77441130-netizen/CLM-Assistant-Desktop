@@ -54,6 +54,55 @@ Legend:
 - Electron starts Agent Runtime through Main: TESTED
 - GUI human verification: BLOCKED_EXTERNAL
 
+## Phase 2
+
+- Workspace Grant: TESTED
+- Native folder picker IPC: TESTED
+- WorkspacePathPolicy: TESTED
+- Path traversal rejection: TESTED
+- Absolute path rejection: TESTED
+- UNC path rejection: TESTED
+- Device path rejection: TESTED
+- Alternate data stream rejection: TESTED
+- Reserved Windows name rejection: TESTED
+- Symlink escape rejection: TESTED
+- Junction escape test: BLOCKED_EXTERNAL
+- Tool SDK result contract: IMPLEMENTED
+- filesystem.list_directory: TESTED
+- filesystem.stat: TESTED
+- filesystem.read_text: TESTED
+- filesystem.search: TESTED
+- filesystem.hash_file: TESTED
+- filesystem.find_duplicates: TESTED
+- filesystem.create_directory: TESTED
+- filesystem.write_new_text: TESTED
+- filesystem.copy: TESTED
+- filesystem.move: TESTED
+- filesystem.rename: TESTED
+- filesystem.overwrite_text: TESTED
+- host.system_info: TESTED
+- host.list_processes: TESTED
+- host.list_registered_apps: TESTED
+- host.launch_registered_app: TESTED_WITH_MOCK
+- Structured Task Service: TESTED
+- Exact Approval: TESTED
+- Approval reject: TESTED
+- Approval expiry: TESTED
+- Argument tampering: TESTED
+- File changed while waiting: TESTED
+- Undo success: TESTED
+- Undo conflict: TESTED
+- Duplicate undo rejection: TESTED
+- Audit redaction: TESTED
+- Runtime restart persistence: TESTED
+- Renderer generic IPC rejection: TESTED
+- Renderer session token boundary: TESTED
+- Chinese UI state mapping: TESTED
+- Native folder picker human verification: BLOCKED_EXTERNAL
+- Tray human verification: BLOCKED_EXTERNAL
+- Close-to-background human verification: BLOCKED_EXTERNAL
+- Full quit human verification: BLOCKED_EXTERNAL
+
 ## Explicitly Not Implemented In Phase 1
 
 - Production OpenAI API integration: NOT_IMPLEMENTED

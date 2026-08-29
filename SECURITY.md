@@ -21,3 +21,7 @@
 Human approval is required for destructive deletion, overwrites, irreversible batch operations, cross-workspace bulk movement, application shutdown that may lose unsaved data, install/uninstall, registry/system settings, admin elevation, external transmission, account credentials, payments, forms, and reduced system protection.
 
 Approval must bind exact tool, exact arguments, argument hash, working directory, risk reason, expiration, run ID, and action ID.
+
+## Workspace Path Policy
+
+Renderer and future LLM code may only reference files through `workspace_id` and relative paths. Runtime rejects path traversal, absolute paths, UNC paths, device paths, alternate data streams, reserved Windows device names, workspace escape through symlinks, same-path moves, and overwriting destinations without approval.

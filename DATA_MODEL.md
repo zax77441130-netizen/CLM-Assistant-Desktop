@@ -2,6 +2,7 @@
 
 Core entities:
 
+- WorkspaceGrant
 - Task
 - TaskStep
 - Action
@@ -27,3 +28,5 @@ Task states:
 - BLOCKED
 
 Phase 1 persists the schema and mock task records. It does not implement production LLM reasoning or unrestricted tool execution.
+
+Phase 2 adds workspace grants, approval metadata, undo preconditions/postconditions, and audit events for structured file and host tasks.

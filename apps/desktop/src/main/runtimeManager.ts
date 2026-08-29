@@ -30,6 +30,24 @@ export class RuntimeManager {
     return this.token;
   }
 
+  async runtimeRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    if (!this.status || this.status.state !== "running") {
+      throw new Error("Agent Runtime is not running.");
+    }
+    const response = await fetch(`http://127.0.0.1:${this.status.port}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Desktop-Token": this.token,
+        ...(init.headers ?? {})
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Runtime API failed: ${response.status}`);
+    }
+    return (await response.json()) as T;
+  }
+
   async start(): Promise<RuntimeStatus> {
     mkdirSync(this.options.dataDir, { recursive: true });
     mkdirSync(dirname(this.stateFile), { recursive: true });

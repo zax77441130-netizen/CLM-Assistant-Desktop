@@ -46,6 +46,19 @@ class Task(Base):
     actions: Mapped[list[Action]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
 
+class WorkspaceGrant(Base):
+    __tablename__ = "workspace_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    display_name: Mapped[str] = mapped_column(String(240))
+    root_path: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    permission_profile: Mapped[str] = mapped_column(String(80), default="standard")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class TaskStep(Base):
     __tablename__ = "task_steps"
 
@@ -73,13 +86,20 @@ class Approval(Base):
     __tablename__ = "approvals"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
     action_id: Mapped[str] = mapped_column(ForeignKey("actions.id"))
+    tool_name: Mapped[str] = mapped_column(String(160))
+    normalized_arguments: Mapped[dict[str, Any]] = mapped_column(JSON)
     exact_tool: Mapped[str] = mapped_column(String(160))
     exact_arguments: Mapped[dict[str, Any]] = mapped_column(JSON)
     argument_hash: Mapped[str] = mapped_column(String(128))
+    risk_level: Mapped[str] = mapped_column(String(40))
     working_directory: Mapped[str] = mapped_column(Text)
     risk_reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(40), default="PENDING")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
@@ -107,10 +127,20 @@ class UndoRecord(Base):
     __tablename__ = "undo_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
     action_id: Mapped[str] = mapped_column(ForeignKey("actions.id"))
+    operation: Mapped[str] = mapped_column(String(80))
     undo_type: Mapped[str] = mapped_column(String(80))
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    destination: Mapped[str | None] = mapped_column(Text, nullable=True)
+    precondition: Mapped[dict[str, Any]] = mapped_column(JSON)
+    postcondition: Mapped[dict[str, Any]] = mapped_column(JSON)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    backup_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="PENDING")
     applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuditEvent(Base):

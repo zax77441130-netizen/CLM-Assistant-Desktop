@@ -10,3 +10,5 @@
 - Validated Windows backend tests, lint, typing, frontend tests, production build, Alembic migration, direct runtime smoke, PyInstaller sidecar build, and sidecar EXE smoke.
 - Fixed Electron build output so Main and Preload emit to stable paths consumed by the launcher.
 - Reworked Windows dev launcher to verify build outputs, Vite readiness, Electron survival, Agent Runtime state, logs, and tracked PID cleanup.
+- Added Phase 2 secure workspace grants, centralized path policy, structured local file tools, host read tools, approval, undo, audit, and renderer IPC/API flow.
+- Added tests for path safety, file tools, approvals, undo, audit redaction, host whitelist, IPC allowlist, and Chinese state labels.

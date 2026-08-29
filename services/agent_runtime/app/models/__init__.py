@@ -9,6 +9,7 @@ from app.models.entities import (
     TaskState,
     TaskStep,
     UndoRecord,
+    WorkspaceGrant,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "TaskState",
     "TaskStep",
     "UndoRecord",
+    "WorkspaceGrant",
 ]

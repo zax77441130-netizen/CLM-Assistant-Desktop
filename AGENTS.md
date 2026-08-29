@@ -17,3 +17,11 @@ Do not declare Windows PASS unless the command ran on Windows.
 Do not declare GUI PASS unless a human verified the GUI.
 
 Do not modify the old project. It is read-only reference material only.
+
+## Phase 2 Tool Engine Rules
+
+Renderer must not receive the desktop session token, call generic IPC, execute raw tools, run commands, or send arbitrary absolute paths as tool arguments.
+
+Local tools must execute through WorkspaceGrant plus relative paths. Centralized WorkspacePathPolicy is mandatory for filesystem tools.
+
+Overwriting files requires exact approval and backup-backed undo. Permanent delete, unrestricted shell, natural language planning, production LLM calls, and Windows UI Automation are outside Phase 2.
