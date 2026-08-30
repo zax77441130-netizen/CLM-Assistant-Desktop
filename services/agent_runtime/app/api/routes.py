@@ -13,19 +13,26 @@ from app.agent.provider_settings import ProviderSettingsService
 from app.agent.orchestrator import AgentOrchestrator, CancellationService
 from app.core import host_tools
 from app.db.session import get_db
-from app.models import Action, Approval, Observation, Task, UndoRecord, WorkspaceGrant
+from app.models import Action, Approval, Clarification, Observation, PlanStep, Task, TaskEvent, TaskState, UndoRecord, WorkspaceGrant
 from app.schemas import (
     ApprovalDecisionRequest,
     ApprovalResponse,
+    AssistantPlanStepResponse,
     AssistantTaskRequest,
     AssistantTaskResponse,
+    ClarificationAnswerRequest,
     ProviderKeyRequest,
     ProviderSettingsResponse,
     ProviderSettingsUpdate,
     StructuredTaskRequest,
+    TaskCenterDetailResponse,
+    TaskCenterItemResponse,
+    TaskEventResponse,
     TaskResponse,
     WorkspaceGrantCreate,
     WorkspaceGrantResponse,
+    observation_preview,
+    tool_title,
 )
 from app.services.task_service import MockTaskService
 from app.services.structured_task_service import StructuredTaskService
@@ -122,8 +129,105 @@ def task_response(task: Task, db: Session) -> TaskResponse:
         id=task.id,
         title=task.title,
         state=task.state,
+        workspace_id=task.workspace_id,
+        created_at=task.created_at.isoformat(),
         summary=observation.summary if observation else None,
         observation=observation.evidence if observation else None,
+        undo_record_id=undo.id if undo else None,
+    )
+
+
+def _latest_observation(db: Session, task_id: str) -> Observation | None:
+    return (
+        db.query(Observation)
+        .filter(Observation.task_id == task_id)
+        .order_by(Observation.created_at.desc())
+        .first()
+    )
+
+
+def _latest_pending_undo(db: Session, task_id: str) -> UndoRecord | None:
+    return (
+        db.query(UndoRecord)
+        .filter(UndoRecord.task_id == task_id, UndoRecord.status == "PENDING")
+        .order_by(UndoRecord.created_at.desc())
+        .first()
+    )
+
+
+def _workspace_path(db: Session, workspace_id: str | None) -> str | None:
+    if not workspace_id:
+        return None
+    grant = db.get(WorkspaceGrant, workspace_id)
+    return grant.root_path if grant else None
+
+
+def _task_progress(db: Session, task_id: str) -> list[str]:
+    steps = db.query(PlanStep).filter(PlanStep.task_id == task_id).order_by(PlanStep.sort_order.asc()).all()
+    return [f"{tool_title(step.tool_name)}：{_state_label(step.status)}" for step in steps]
+
+
+def _state_label(state: object) -> str:
+    value = getattr(state, "value", str(state))
+    return {
+        "CREATED": "已建立",
+        "PLANNING": "規劃中",
+        "WAITING_CLARIFICATION": "等待補充資訊",
+        "QUEUED": "排隊中",
+        "RUNNING": "執行中",
+        "WAITING_APPROVAL": "等待核准",
+        "RETRYING": "重試中",
+        "CANCELLING": "取消中",
+        "CANCELLED": "已取消",
+        "COMPLETED": "完成",
+        "FAILED": "失敗",
+        "NEEDS_REVIEW": "需要檢查",
+    }.get(value, str(value))
+
+
+def task_center_item(task: Task, db: Session) -> TaskCenterItemResponse:
+    observation = _latest_observation(db, task.id)
+    return TaskCenterItemResponse(
+        id=task.id,
+        title=task.title,
+        state=task.state,
+        workspace_id=task.workspace_id,
+        workspace_path=_workspace_path(db, task.workspace_id),
+        created_at=task.created_at.isoformat(),
+        progress=_task_progress(db, task.id),
+        pending_approval=task.state == TaskState.WAITING_APPROVAL,
+        summary=observation.summary if observation else None,
+    )
+
+
+def task_center_detail(task: Task, db: Session) -> TaskCenterDetailResponse:
+    item = task_center_item(task, db)
+    observation = _latest_observation(db, task.id)
+    undo = _latest_pending_undo(db, task.id)
+    steps = db.query(PlanStep).filter(PlanStep.task_id == task.id).order_by(PlanStep.sort_order.asc()).all()
+    events = db.query(TaskEvent).filter(TaskEvent.task_id == task.id).order_by(TaskEvent.created_at.asc()).all()
+    return TaskCenterDetailResponse(
+        **item.model_dump(),
+        steps=[
+            AssistantPlanStepResponse(
+                title=tool_title(step.tool_name),
+                reason=step.reason,
+                status=_state_label(step.status),
+            )
+            for step in steps
+        ],
+        events=[
+            TaskEventResponse(
+                event_type=event.event_type,
+                from_state=event.from_state,
+                to_state=event.to_state,
+                message=event.message,
+                created_at=event.created_at.isoformat(),
+            )
+            for event in events
+        ],
+        observationPreview=observation_preview(observation.evidence if observation else None),
+        technicalDetails=observation.evidence if observation else None,
         undo_record_id=undo.id if undo else None,
     )
 
@@ -140,6 +244,65 @@ def get_task(task_id: str, db: Session = Depends(get_db)) -> TaskResponse:
     if task is None:
         raise ValueError("TASK_NOT_FOUND")
     return task_response(task, db)
+
+
+@router.get("/task-center/tasks", response_model=list[TaskCenterItemResponse], dependencies=[Depends(require_desktop_token)])
+def list_task_center_tasks(db: Session = Depends(get_db)) -> list[TaskCenterItemResponse]:
+    tasks = db.query(Task).order_by(Task.created_at.desc()).limit(100).all()
+    return [task_center_item(task, db) for task in tasks]
+
+
+@router.get("/task-center/tasks/{task_id}", response_model=TaskCenterDetailResponse, dependencies=[Depends(require_desktop_token)])
+def get_task_center_task(task_id: str, db: Session = Depends(get_db)) -> TaskCenterDetailResponse:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise ValueError("TASK_NOT_FOUND")
+    return task_center_detail(task, db)
+
+
+@router.post("/assistant/tasks/{task_id}/clarification", response_model=TaskCenterDetailResponse, dependencies=[Depends(require_desktop_token)])
+def answer_clarification(task_id: str, payload: ClarificationAnswerRequest, db: Session = Depends(get_db)) -> TaskCenterDetailResponse:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise ValueError("TASK_NOT_FOUND")
+    clarification = (
+        db.query(Clarification)
+        .filter(Clarification.task_id == task_id, Clarification.status == "WAITING")
+        .order_by(Clarification.created_at.desc())
+        .first()
+    )
+    if clarification is None:
+        raise ValueError("CLARIFICATION_NOT_WAITING")
+    clarification.answer = payload.answer
+    clarification.status = "ANSWERED"
+    clarification.answered_at = datetime.now(UTC)
+    db.add(TaskEvent(task_id=task.id, event_type="clarification.answered", from_state=task.state.value, to_state=task.state.value, message="使用者已補充任務資訊。", payload={}))
+    db.commit()
+    return task_center_detail(task, db)
+
+
+@router.post("/assistant/tasks/{task_id}/retry", response_model=TaskCenterDetailResponse, dependencies=[Depends(require_desktop_token)])
+def retry_assistant_task(task_id: str, db: Session = Depends(get_db)) -> TaskCenterDetailResponse:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise ValueError("TASK_NOT_FOUND")
+    if task.state != TaskState.FAILED:
+        raise ValueError("TASK_NOT_RETRYABLE")
+    db.add(TaskEvent(task_id=task.id, event_type="task.retry.requested", from_state=task.state.value, to_state=task.state.value, message="已收到重試要求，將依安全政策重新檢查。", payload={}))
+    db.commit()
+    return task_center_detail(task, db)
+
+
+@router.post("/assistant/tasks/{task_id}/continue", response_model=TaskCenterDetailResponse, dependencies=[Depends(require_desktop_token)])
+def continue_assistant_task(task_id: str, db: Session = Depends(get_db)) -> TaskCenterDetailResponse:
+    task = db.get(Task, task_id)
+    if task is None:
+        raise ValueError("TASK_NOT_FOUND")
+    if task.state != TaskState.WAITING_APPROVAL:
+        raise ValueError("TASK_NOT_WAITING_APPROVAL")
+    db.add(TaskEvent(task_id=task.id, event_type="task.continue.requested", from_state=task.state.value, to_state=task.state.value, message="已收到繼續要求；待核准動作需先完成核准。", payload={}))
+    db.commit()
+    return task_center_detail(task, db)
 
 
 @router.post("/approvals/{approval_id}/decision", response_model=TaskResponse, dependencies=[Depends(require_desktop_token)])

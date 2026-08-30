@@ -12,6 +12,7 @@ from app.agent.provider_settings import ProviderSettingsService
 from app.agent.security import redact_sensitive_text
 
 CLARIFY = "我目前無法確定你要執行的操作，請補充檔名、資料夾名稱或目的地。"
+AI_REQUIRED = "這個任務需要語意摘要或複雜推理，請先在設定中啟用 AI 模式。"
 
 
 class PlannerProvider(ABC):
@@ -27,6 +28,9 @@ class DeterministicPlannerProvider(PlannerProvider):
 
     def create_plan(self, context: PlanContext) -> AgentPlan:
         text = _normalize(context.request)
+        plan = self._multi_step(text)
+        if plan is not None:
+            return plan
         step = self._single_step(text)
         if step is None:
             return AgentPlan(
@@ -36,6 +40,37 @@ class DeterministicPlannerProvider(PlannerProvider):
                 steps=[],
             )
         return AgentPlan(goal=context.request, needsClarification=False, clarificationQuestion=None, steps=[step])
+
+    def _multi_step(self, text: str) -> AgentPlan | None:
+        if text in {"列出目前工作區的檔案，然後找出重複檔案", "列出檔案，然後找出重複檔案"}:
+            return AgentPlan(
+                version=1,
+                goal=text,
+                needsClarification=False,
+                clarificationQuestion=None,
+                steps=[
+                    PlanStepSpec(tool="filesystem.list_directory", arguments={"path": "."}, reason="查看目前工作區內容"),
+                    PlanStepSpec(tool="filesystem.find_duplicates", arguments={"path": "."}, reason="找出內容相同的檔案", dependsOn=[1]),
+                ],
+            )
+        match = re.match(r"^建立資料夾\s+(.+)\s+並複製\s+(.+)\s+到\s+(.+)$", text)
+        if match:
+            folder, source, destination = (item.strip() for item in match.groups())
+            if not folder or not source or not destination:
+                return None
+            return AgentPlan(
+                version=1,
+                goal=text,
+                needsClarification=False,
+                clarificationQuestion=None,
+                steps=[
+                    PlanStepSpec(tool="filesystem.create_directory", arguments={"path": folder}, reason="建立新的工作區資料夾"),
+                    PlanStepSpec(tool="filesystem.copy", arguments={"path": source, "destination": destination}, reason="複製指定檔案", dependsOn=[1]),
+                ],
+            )
+        if re.match(r"^讀取\s+.+\s*，?然後建立.*摘要", text):
+            return AgentPlan(goal=text, needsClarification=True, clarificationQuestion=AI_REQUIRED, steps=[])
+        return None
 
     def _single_step(self, text: str) -> PlanStepSpec | None:
         if text in {"列出目前工作區的檔案", "列出工作區的檔案", "列出檔案", "查看目前工作區"}:

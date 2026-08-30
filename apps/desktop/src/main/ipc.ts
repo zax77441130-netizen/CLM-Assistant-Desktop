@@ -38,8 +38,22 @@ export function registerIpc(runtime: RuntimeManager): void {
   ipcMain.handle(IPC_CHANNELS.cancelAssistantTask, (_event, taskId: string) =>
     runtime.runtimeRequest(`/api/assistant/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST" })
   );
+  ipcMain.handle(IPC_CHANNELS.answerClarification, (_event, payload: { taskId: string; answer: string }) =>
+    runtime.runtimeRequest(`/api/assistant/tasks/${encodeURIComponent(payload.taskId)}/clarification`, {
+      method: "POST",
+      body: JSON.stringify({ answer: payload.answer })
+    })
+  );
+  ipcMain.handle(IPC_CHANNELS.retryAssistantTask, (_event, taskId: string) =>
+    runtime.runtimeRequest(`/api/assistant/tasks/${encodeURIComponent(taskId)}/retry`, { method: "POST" })
+  );
+  ipcMain.handle(IPC_CHANNELS.continueAssistantTask, (_event, taskId: string) =>
+    runtime.runtimeRequest(`/api/assistant/tasks/${encodeURIComponent(taskId)}/continue`, { method: "POST" })
+  );
   ipcMain.handle(IPC_CHANNELS.getTasks, () => runtime.runtimeRequest("/api/tasks"));
   ipcMain.handle(IPC_CHANNELS.getTask, (_event, taskId: string) => runtime.runtimeRequest(`/api/tasks/${encodeURIComponent(taskId)}`));
+  ipcMain.handle(IPC_CHANNELS.getTaskCenterTasks, () => runtime.runtimeRequest("/api/task-center/tasks"));
+  ipcMain.handle(IPC_CHANNELS.getTaskCenterTask, (_event, taskId: string) => runtime.runtimeRequest(`/api/task-center/tasks/${encodeURIComponent(taskId)}`));
   ipcMain.handle(IPC_CHANNELS.getApprovals, () => runtime.runtimeRequest("/api/approvals"));
   ipcMain.handle(IPC_CHANNELS.decideApproval, (_event, payload: { approvalId: string; approve: boolean }) =>
     runtime.runtimeRequest(`/api/approvals/${payload.approvalId}/decision`, {

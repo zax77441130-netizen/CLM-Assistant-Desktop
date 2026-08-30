@@ -1,12 +1,15 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $ProjectRoot = "C:\Users\zong\Desktop\CLM-Assistant-Desktop"
 $RuntimeRoot = Join-Path $ProjectRoot "services\agent_runtime"
 $VenvPython = Join-Path $ProjectRoot ".venv-win\Scripts\python.exe"
-$RuntimeDir = Join-Path $ProjectRoot ".runtime\phase3-write-smoke"
+$FormalAppDataRoot = Join-Path $env:APPDATA "CLM Assistant Desktop"
+$FormalDesktopWorkspace = "C:\Users\zong\Desktop\測試資料夾"
+$RunId = [guid]::NewGuid().ToString("N")
+$RuntimeDir = Join-Path $env:TEMP "clm-phase3-write-runtime-$RunId"
 $StateFile = Join-Path $RuntimeDir "runtime-state.json"
 $PidFile = Join-Path $RuntimeDir "runtime.pid"
-$WorkspaceRoot = Join-Path $env:TEMP ("clm-phase3-write-" + [guid]::NewGuid().ToString("N"))
+$WorkspaceRoot = Join-Path $env:TEMP "clm-phase3-write-workspace-$RunId"
 $FolderName = "phase3-write-" + (Get-Date -Format "yyyyMMdd-HHmmss") + "-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
 $ExpectedPath = Join-Path $WorkspaceRoot $FolderName
 $Token = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
@@ -64,9 +67,23 @@ function Assert-True {
   if (-not $Condition) { throw $Message }
 }
 
+function Assert-IsolatedPath {
+  param([string]$Path, [string]$Name)
+  $FullPath = [System.IO.Path]::GetFullPath($Path)
+  $AppDataFull = [System.IO.Path]::GetFullPath($FormalAppDataRoot)
+  Assert-True (-not $FullPath.StartsWith($AppDataFull, [System.StringComparison]::OrdinalIgnoreCase)) "$Name resolved into formal AppData."
+  $DesktopWorkspaceFull = [System.IO.Path]::GetFullPath($FormalDesktopWorkspace)
+  Assert-True (-not $FullPath.StartsWith($DesktopWorkspaceFull, [System.StringComparison]::OrdinalIgnoreCase)) "$Name resolved into formal desktop workspace."
+}
+
 if (-not (Test-Path $VenvPython)) {
   throw ".venv-win is missing. Run scripts\bootstrap_windows.ps1 first."
 }
+
+Assert-IsolatedPath $RuntimeDir "RuntimeDir"
+Assert-IsolatedPath $StateFile "StateFile"
+Assert-IsolatedPath $WorkspaceRoot "Workspace"
+Assert-IsolatedPath $ExpectedPath "TargetPath"
 
 New-Item -ItemType Directory -Force $RuntimeDir, $WorkspaceRoot | Out-Null
 Remove-Item -Force $StateFile, $PidFile -ErrorAction SilentlyContinue
@@ -131,4 +148,5 @@ finally {
     $Process.WaitForExit(5000) | Out-Null
   }
   Remove-Item -Recurse -Force $WorkspaceRoot -ErrorAction SilentlyContinue
+  Remove-Item -Recurse -Force $RuntimeDir -ErrorAction SilentlyContinue
 }

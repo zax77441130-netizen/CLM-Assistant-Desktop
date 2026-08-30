@@ -118,7 +118,7 @@ Legend:
 
 ## Phase 2.2 External Verification
 
-- Human Windows desktop verification: BLOCKED_EXTERNAL — waiting for human Windows desktop verification
+- Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
 
 ## Phase 3
 
@@ -146,7 +146,37 @@ Legend:
 - Phase 3 migration `0004_agent_orchestration`: TESTED
 - Phase 3 Runtime API smoke: TESTED
 - OpenAI live connection: BLOCKED_EXTERNAL — requires user-provided OpenAI API key
-- Human Windows desktop verification: BLOCKED_EXTERNAL — waiting for human Windows desktop verification
+- Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
+
+## Phase 4
+
+- Isolated smoke runtime data directories: TESTED
+- Isolated smoke SQLite databases: TESTED
+- Isolated smoke workspaces: TESTED
+- Formal AppData unchanged during Phase 4 smoke: TESTED
+- Plan version field: TESTED
+- Independent PlanStep status: TESTED
+- Step dependency persistence: TESTED
+- Multi-step read-only execution: TESTED
+- Multi-step create and copy execution: TESTED
+- Failure stops following dependent work: TESTED
+- Filesystem write postconditions in multi-step flow: TESTED
+- TaskStateService centralized transitions: TESTED
+- TaskEvent persistence: TESTED
+- Idempotency key replay: TESTED
+- Workspace/path write lock: TESTED
+- Approval persists across Runtime restart: TESTED
+- Approval resume through existing exact approval flow: TESTED
+- Clarification waiting and answered event: TESTED
+- Cancellation of waiting task: TESTED
+- Retry request endpoint: IMPLEMENTED
+- Continue request endpoint: IMPLEMENTED
+- Task Center list API: TESTED
+- Task Center detail API: TESTED
+- Task Center Renderer page: TESTED
+- OpenAI Responses API strict structured planner wiring: IMPLEMENTED
+- OpenAI live connection: BLOCKED_EXTERNAL — requires user-provided OpenAI API key
+- Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
 
 ## Explicitly Not Implemented In Phase 1
 

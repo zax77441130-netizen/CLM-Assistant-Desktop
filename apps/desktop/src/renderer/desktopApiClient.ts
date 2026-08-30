@@ -37,6 +37,34 @@ export interface AssistantTaskResult {
   undo_record_id?: string;
 }
 
+export interface TaskEvent {
+  event_type: string;
+  from_state?: string | null;
+  to_state?: string | null;
+  message: string;
+  created_at: string;
+}
+
+export interface TaskCenterItem {
+  id: string;
+  title: string;
+  state: string;
+  workspace_id?: string | null;
+  workspace_path?: string | null;
+  created_at: string;
+  progress: string[];
+  pending_approval: boolean;
+  summary?: string | null;
+}
+
+export interface TaskCenterDetail extends TaskCenterItem {
+  events: TaskEvent[];
+  steps: Array<{ title: string; reason: string; status: string }>;
+  observationPreview?: string | null;
+  technicalDetails?: Record<string, unknown> | null;
+  undo_record_id?: string | null;
+}
+
 export interface ProviderSettings {
   mode: "local" | "openai";
   model: string;
@@ -67,8 +95,13 @@ export type DesktopBridge = {
   createStructuredTask: (payload: unknown) => Promise<TaskResult>;
   createAssistantTask: (payload: unknown) => Promise<AssistantTaskResult>;
   cancelAssistantTask: (taskId: string) => Promise<AssistantTaskResult>;
+  answerClarification: (taskId: string, answer: string) => Promise<TaskCenterDetail>;
+  retryAssistantTask: (taskId: string) => Promise<TaskCenterDetail>;
+  continueAssistantTask: (taskId: string) => Promise<TaskCenterDetail>;
   getTasks: () => Promise<TaskResult[]>;
   getTask: (taskId: string) => Promise<TaskResult>;
+  getTaskCenterTasks: () => Promise<TaskCenterItem[]>;
+  getTaskCenterTask: (taskId: string) => Promise<TaskCenterDetail>;
   getApprovals: () => Promise<Approval[]>;
   decideApproval: (approvalId: string, approve: boolean) => Promise<TaskResult>;
   undoAction: (undoRecordId: string) => Promise<TaskResult>;

@@ -56,6 +56,8 @@ class TaskResponse(BaseModel):
     id: str
     title: str
     state: TaskState
+    workspace_id: str | None = None
+    created_at: str | None = None
     summary: str | None = None
     observation: dict[str, Any] | None = None
     approval_id: str | None = None
@@ -65,6 +67,31 @@ class TaskResponse(BaseModel):
 class AssistantTaskRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     workspace_id: str | None = None
+    idempotency_key: str | None = Field(default=None, max_length=120)
+
+
+class ClarificationAnswerRequest(BaseModel):
+    answer: str = Field(min_length=1, max_length=1000)
+
+
+class TaskEventResponse(BaseModel):
+    event_type: str
+    from_state: str | None = None
+    to_state: str | None = None
+    message: str
+    created_at: str
+
+
+class TaskCenterItemResponse(BaseModel):
+    id: str
+    title: str
+    state: TaskState
+    workspace_id: str | None = None
+    workspace_path: str | None = None
+    created_at: str
+    progress: list[str] = Field(default_factory=list)
+    pending_approval: bool = False
+    summary: str | None = None
 
 
 class AssistantPlanStepResponse(BaseModel):
@@ -73,7 +100,16 @@ class AssistantPlanStepResponse(BaseModel):
     status: str = "等待中"
 
 
+class TaskCenterDetailResponse(TaskCenterItemResponse):
+    events: list[TaskEventResponse] = Field(default_factory=list)
+    steps: list[AssistantPlanStepResponse] = Field(default_factory=list)
+    observationPreview: str | None = None
+    technicalDetails: dict[str, Any] | None = None
+    undo_record_id: str | None = None
+
+
 class AssistantPlanResponse(BaseModel):
+    version: int = 1
     goal: str
     needsClarification: bool
     clarificationQuestion: str | None = None
@@ -111,6 +147,7 @@ class AssistantTaskResponse(BaseModel):
             plan_data = plan.model_dump() if isinstance(plan, BaseModel) else {}
             safe_plan = AssistantPlanResponse(
                 goal=str(plan_data.get("goal", "")),
+                version=int(plan_data.get("version", 1)),
                 needsClarification=bool(plan_data.get("needsClarification", False)),
                 clarificationQuestion=plan_data.get("clarificationQuestion"),
                 steps=[

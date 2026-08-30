@@ -1,13 +1,16 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $ProjectRoot = "C:\Users\zong\Desktop\CLM-Assistant-Desktop"
 $RuntimeRoot = Join-Path $ProjectRoot "services\agent_runtime"
 $VenvPython = Join-Path $ProjectRoot ".venv-win\Scripts\python.exe"
-$RuntimeDir = Join-Path $ProjectRoot ".runtime\phase2-smoke"
-$LogDir = Join-Path $ProjectRoot ".runtime\logs"
+$FormalAppDataRoot = Join-Path $env:APPDATA "CLM Assistant Desktop"
+$FormalDesktopWorkspace = "C:\Users\zong\Desktop\測試資料夾"
+$RunId = [guid]::NewGuid().ToString("N")
+$RuntimeDir = Join-Path $env:TEMP "clm-phase2-runtime-$RunId"
+$LogDir = Join-Path $env:TEMP "clm-phase2-logs-$RunId"
 $StateFile = Join-Path $RuntimeDir "runtime-state.json"
 $PidFile = Join-Path $RuntimeDir "runtime.pid"
-$Sandbox = Join-Path $env:TEMP ("clm-phase2-smoke-" + [guid]::NewGuid().ToString("N"))
+$Sandbox = Join-Path $env:TEMP "clm-phase2-workspace-$RunId"
 $Token = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
 
 function Invoke-RuntimeJson {
@@ -26,9 +29,23 @@ function Assert-True {
   if (-not $Condition) { throw $Message }
 }
 
+function Assert-IsolatedPath {
+  param([string]$Path, [string]$Name)
+  $FullPath = [System.IO.Path]::GetFullPath($Path)
+  $AppDataFull = [System.IO.Path]::GetFullPath($FormalAppDataRoot)
+  Assert-True (-not $FullPath.StartsWith($AppDataFull, [System.StringComparison]::OrdinalIgnoreCase)) "$Name resolved into formal AppData."
+  $DesktopWorkspaceFull = [System.IO.Path]::GetFullPath($FormalDesktopWorkspace)
+  Assert-True (-not $FullPath.StartsWith($DesktopWorkspaceFull, [System.StringComparison]::OrdinalIgnoreCase)) "$Name resolved into formal desktop workspace."
+}
+
 if (-not (Test-Path $VenvPython)) {
   throw ".venv-win is missing. Run scripts\bootstrap_windows.ps1 first."
 }
+
+Assert-IsolatedPath $RuntimeDir "RuntimeDir"
+Assert-IsolatedPath $LogDir "LogDir"
+Assert-IsolatedPath $StateFile "StateFile"
+Assert-IsolatedPath $Sandbox "Workspace"
 
 New-Item -ItemType Directory -Force $RuntimeDir, $LogDir, $Sandbox | Out-Null
 Remove-Item -Force $StateFile, $PidFile -ErrorAction SilentlyContinue
@@ -109,4 +126,5 @@ finally {
     $Process.WaitForExit(5000) | Out-Null
   }
   Remove-Item -Recurse -Force $Sandbox -ErrorAction SilentlyContinue
+  Remove-Item -Recurse -Force $RuntimeDir, $LogDir -ErrorAction SilentlyContinue
 }

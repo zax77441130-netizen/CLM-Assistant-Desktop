@@ -27,7 +27,9 @@ class TaskState(str, enum.Enum):
     ANALYZING = "ANALYZING"
     NEEDS_INPUT = "NEEDS_INPUT"
     PLANNED = "PLANNED"
+    QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    RETRYING = "RETRYING"
     CANCELLING = "CANCELLING"
     WAITING_APPROVAL = "WAITING_APPROVAL"
     VERIFYING = "VERIFYING"
@@ -35,6 +37,7 @@ class TaskState(str, enum.Enum):
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
     BLOCKED = "BLOCKED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
 
 
 class Task(Base):
@@ -43,6 +46,8 @@ class Task(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     title: Mapped[str] = mapped_column(String(240))
     state: Mapped[TaskState] = mapped_column(Enum(TaskState), default=TaskState.RECEIVED)
+    workspace_id: Mapped[str | None] = mapped_column(ForeignKey("workspace_grants.id"), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -83,6 +88,8 @@ class Action(Base):
     arguments_hash: Mapped[str] = mapped_column(String(128))
     risk_level: Mapped[str] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(40), default="PENDING")
+    workspace_id: Mapped[str | None] = mapped_column(ForeignKey("workspace_grants.id"), nullable=True)
+    target_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     task: Mapped[Task] = relationship(back_populates="actions")
 
 
@@ -112,6 +119,8 @@ class Observation(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     action_id: Mapped[str] = mapped_column(ForeignKey("actions.id"))
+    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+    workspace_id: Mapped[str | None] = mapped_column(ForeignKey("workspace_grants.id"), nullable=True)
     summary: Mapped[str] = mapped_column(Text)
     evidence: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
@@ -192,6 +201,8 @@ class Plan(Base):
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
     goal: Mapped[str] = mapped_column(Text)
     provider: Mapped[str] = mapped_column(String(80))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    parent_plan_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     status: Mapped[str] = mapped_column(String(40), default="CREATED")
     needs_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
     clarification_question: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -204,11 +215,16 @@ class PlanStep(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     plan_id: Mapped[str] = mapped_column(ForeignKey("plans.id"))
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    workspace_id: Mapped[str | None] = mapped_column(ForeignKey("workspace_grants.id"), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer)
+    depends_on_step_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     tool_name: Mapped[str] = mapped_column(String(160))
     arguments: Mapped[dict[str, Any]] = mapped_column(JSON)
     reason: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(40), default="CREATED")
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=1)
+    output_size: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -231,3 +247,38 @@ class ProviderSetting(Base):
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class TaskEvent(Base):
+    __tablename__ = "task_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    event_type: Mapped[str] = mapped_column(String(80))
+    from_state: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    to_state: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    message: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ExecutionLease(Base):
+    __tablename__ = "execution_leases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace_grants.id"))
+    path_key: Mapped[str] = mapped_column(Text)
+    holder_task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    status: Mapped[str] = mapped_column(String(40), default="HELD")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class IdempotencyRecord(Base):
+    __tablename__ = "idempotency_records"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(128))
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    response: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

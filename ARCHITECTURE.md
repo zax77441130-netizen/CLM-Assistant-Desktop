@@ -94,6 +94,26 @@ OpenAI API keys are stored only through Windows Credential Manager by the Python
 
 Workspace file content is untrusted. Prompt injection text cannot alter policy; model output must still pass validation and execution policy. The provider prompt forbids shell commands, absolute paths, unknown tools, secret exfiltration, and policy changes based on file contents.
 
+## Phase 4 Reliable Multi-step Execution
+
+Phase 4 extends the assistant loop from a single safe step to a durable multi-step execution core:
+
+task intake -> planning -> plan validation -> policy evaluation -> queued execution -> per-step execution -> filesystem postcondition -> observation -> continue, clarification, approval, retry, cancellation, or final result.
+
+Plans now carry a version and each plan step stores its own status, dependency pointer, workspace id, retry counters, output size, start time, and finish time. The Runtime executes one dependency-satisfied step at a time and never marks a write step complete unless the real Phase 2 tool result contains a verified filesystem postcondition.
+
+Task state transitions are centralized in `TaskStateService`. Legal Phase 4 states are `CREATED`, `PLANNING`, `WAITING_CLARIFICATION`, `QUEUED`, `RUNNING`, `WAITING_APPROVAL`, `RETRYING`, `CANCELLING`, `CANCELLED`, `COMPLETED`, `FAILED`, and `NEEDS_REVIEW`, while older Phase 1/2 compatibility states remain readable. Every orchestrator transition writes a `task_events` row so the Task Center and Assistant home read the same persisted state.
+
+The execution layer adds idempotency records and short-lived execution leases. Renderer resubmits with the same idempotency key return the original task response instead of creating duplicate tasks. Write steps acquire workspace/path leases before execution; conflicting writes fail closed with a Chinese user-facing message and no filesystem side effect. Read-only tasks remain parallel-safe.
+
+Workspace identity is stored on tasks, actions, observations, and plan steps. Runtime revalidates workspace grants before each Phase 2 tool call and never falls back to the project directory, AppData, current working directory, or smoke-test temp folders.
+
+Clarification, approval, cancellation, retry, continue, and restart recovery are exposed through explicit Runtime APIs and IPC methods. Waiting approval tasks persist across Runtime restart. Completed side-effect steps are not blindly replayed; uncertain future recovery cases are represented by `NEEDS_REVIEW`.
+
+The Task Center UI is a Chinese persisted task view with filtering, status, workspace, step timeline, observation preview, actions, and collapsed technical details. General UI surfaces do not show tool ids, raw JSON, SQL, stack traces, IPC channels, ports, or tokens.
+
+The `0005_reliable_task_execution` migration adds task workspace/idempotency columns, action and observation workspace binding, plan versioning, plan step dependency/retry/output metadata, `task_events`, `execution_leases`, and `idempotency_records`. Fresh databases and databases at `0004_agent_orchestration` migrate to the new head through Alembic.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

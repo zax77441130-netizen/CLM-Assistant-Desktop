@@ -10,8 +10,13 @@ declare global {
       createStructuredTask: (payload: unknown) => Promise<unknown>;
       createAssistantTask: (payload: unknown) => Promise<unknown>;
       cancelAssistantTask: (taskId: string) => Promise<unknown>;
+      answerClarification: (taskId: string, answer: string) => Promise<unknown>;
+      retryAssistantTask: (taskId: string) => Promise<unknown>;
+      continueAssistantTask: (taskId: string) => Promise<unknown>;
       getTasks: () => Promise<unknown[]>;
       getTask: (taskId: string) => Promise<unknown>;
+      getTaskCenterTasks: () => Promise<unknown[]>;
+      getTaskCenterTask: (taskId: string) => Promise<unknown>;
       getApprovals: () => Promise<unknown[]>;
       decideApproval: (approvalId: string, approve: boolean) => Promise<unknown>;
       undoAction: (undoRecordId: string) => Promise<unknown>;

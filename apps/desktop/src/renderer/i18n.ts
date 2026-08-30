@@ -22,17 +22,24 @@ const zh = {
   runtime: "Runtime",
   tokenUnavailable: "Session token 不會提供給 Renderer",
   state: {
+    CREATED: "已建立",
+    PLANNING: "規劃中",
+    WAITING_CLARIFICATION: "等待補充資訊",
     RECEIVED: "已接收",
     ANALYZING: "分析中",
     NEEDS_INPUT: "需要補充",
     PLANNED: "已規劃",
+    QUEUED: "排隊中",
     RUNNING: "執行中",
+    RETRYING: "重試中",
+    CANCELLING: "取消中",
     WAITING_APPROVAL: "等待核准",
     VERIFYING: "驗證中",
     COMPLETED: "已完成",
     FAILED: "失敗",
     CANCELLED: "已取消",
-    BLOCKED: "已阻擋"
+    BLOCKED: "已阻擋",
+    NEEDS_REVIEW: "需要檢查"
   } satisfies Record<TaskState, string>
 };
 

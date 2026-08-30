@@ -122,7 +122,7 @@ def test_phase1_legacy_database_upgrades_to_head_and_keeps_rows(tmp_path: Path) 
     migrate_to_head(settings(tmp_path))
     after = {table: row_count(db_path(tmp_path), table) for table in before}
     assert before == after
-    assert revision(db_path(tmp_path)) == "0004_agent_orchestration"
+    assert revision(db_path(tmp_path)) == "0005_reliable_task_execution"
     assert collect_diagnostics(settings(tmp_path)).issues == []
 
 
@@ -137,7 +137,7 @@ def test_phase2_1_partial_database_adds_undo_created_at(tmp_path: Path) -> None:
 def test_phase2_legacy_without_alembic_version_is_baselined(tmp_path: Path) -> None:
     phase2_partial_schema(db_path(tmp_path), with_created_at=True)
     migrate_to_head(settings(tmp_path))
-    assert revision(db_path(tmp_path)) == "0004_agent_orchestration"
+    assert revision(db_path(tmp_path)) == "0005_reliable_task_execution"
     assert collect_diagnostics(settings(tmp_path)).issues == []
 
 
@@ -154,6 +154,20 @@ def test_repeated_migration_is_idempotent(tmp_path: Path) -> None:
     first_columns = columns(db_path(tmp_path), "undo_records")
     migrate_to_head(settings(tmp_path))
     assert columns(db_path(tmp_path), "undo_records") == first_columns
+
+
+def test_phase4_migration_adds_task_execution_tables(tmp_path: Path) -> None:
+    phase2_partial_schema(db_path(tmp_path), with_created_at=True)
+    migrate_to_head(settings(tmp_path))
+    assert "workspace_id" in columns(db_path(tmp_path), "tasks")
+    assert "idempotency_key" in columns(db_path(tmp_path), "tasks")
+    assert "workspace_id" in columns(db_path(tmp_path), "actions")
+    assert "task_id" in columns(db_path(tmp_path), "observations")
+    assert "version" in columns(db_path(tmp_path), "plans")
+    assert "retry_count" in columns(db_path(tmp_path), "plan_steps")
+    assert columns(db_path(tmp_path), "task_events")
+    assert columns(db_path(tmp_path), "execution_leases")
+    assert columns(db_path(tmp_path), "idempotency_records")
 
 
 def test_migrated_orm_queries_and_task_list_succeed(tmp_path: Path) -> None:

@@ -9,6 +9,8 @@ import {
   type AssistantTaskResult,
   type ProviderSettings,
   type RegisteredApp,
+  type TaskCenterDetail,
+  type TaskCenterItem,
   type TaskResult,
   type Workspace
 } from "./desktopApiClient";
@@ -315,8 +317,211 @@ function AssistantPage({ status, bridgeReady }: { status: RuntimeStatus | null; 
   );
 }
 
+const taskFilters = [
+  { id: "all", label: "全部" },
+  { id: "active", label: "執行中" },
+  { id: "approval", label: "待核准" },
+  { id: "done", label: "完成" },
+  { id: "problem", label: "失敗與取消" }
+] as const;
+
+type TaskFilter = (typeof taskFilters)[number]["id"];
+
 function TasksPage(): React.ReactElement {
-  return <section className="panel"><h2>任務紀錄</h2><p>任務、計畫與觀察紀錄會保存在本機資料庫。</p></section>;
+  const [tasks, setTasks] = useState<TaskCenterItem[]>([]);
+  const [detail, setDetail] = useState<TaskCenterDetail | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>("all");
+  const [error, setError] = useState<string | null>(null);
+  const [answer, setAnswer] = useState("");
+
+  const loadTasks = async () => {
+    const bridge = getDesktopBridge();
+    if (!bridge) {
+      setError(bridgeErrorMessage());
+      return;
+    }
+    try {
+      const next = await bridge.getTaskCenterTasks();
+      setTasks(next);
+      if (detail) {
+        setDetail(await bridge.getTaskCenterTask(detail.id));
+      } else if (next[0]) {
+        setDetail(await bridge.getTaskCenterTask(next[0].id));
+      }
+      setError(null);
+    } catch (event) {
+      setError(safeError(event, "任務中心暫時無法讀取，請稍後再試。"));
+    }
+  };
+
+  useEffect(() => {
+    void loadTasks();
+    const timer = window.setInterval(loadTasks, 3000);
+    return () => window.clearInterval(timer);
+  }, [detail?.id]);
+
+  const filteredTasks = tasks.filter((task) => {
+    if (filter === "active") {
+      return ["CREATED", "PLANNING", "QUEUED", "RUNNING", "RETRYING", "CANCELLING"].includes(task.state);
+    }
+    if (filter === "approval") {
+      return task.state === "WAITING_APPROVAL";
+    }
+    if (filter === "done") {
+      return task.state === "COMPLETED";
+    }
+    if (filter === "problem") {
+      return ["FAILED", "CANCELLED", "NEEDS_REVIEW"].includes(task.state);
+    }
+    return true;
+  });
+
+  const selectTask = async (taskId: string) => {
+    const bridge = getDesktopBridge();
+    if (!bridge) {
+      setError(bridgeErrorMessage());
+      return;
+    }
+    setDetail(await bridge.getTaskCenterTask(taskId));
+  };
+
+  const taskAction = async (action: "cancel" | "retry" | "continue" | "undo") => {
+    const bridge = getDesktopBridge();
+    if (!bridge || !detail) {
+      return;
+    }
+    try {
+      if (action === "cancel") {
+        await bridge.cancelAssistantTask(detail.id);
+      }
+      if (action === "retry") {
+        setDetail(await bridge.retryAssistantTask(detail.id));
+        return;
+      }
+      if (action === "continue") {
+        setDetail(await bridge.continueAssistantTask(detail.id));
+        return;
+      }
+      if (action === "undo" && detail.undo_record_id) {
+        await bridge.undoAction(detail.undo_record_id);
+      }
+      await loadTasks();
+    } catch (event) {
+      setError(safeError(event, "任務操作失敗，請查看系統診斷紀錄。"));
+    }
+  };
+
+  const submitClarification = async () => {
+    const bridge = getDesktopBridge();
+    if (!bridge || !detail || !answer.trim()) {
+      return;
+    }
+    try {
+      setDetail(await bridge.answerClarification(detail.id, answer));
+      setAnswer("");
+      await loadTasks();
+    } catch (event) {
+      setError(safeError(event, "補充資訊送出失敗。"));
+    }
+  };
+
+  return (
+    <div className="task-center">
+      <section className="panel task-list-panel">
+        <div className="panel-heading">
+          <h2>任務中心</h2>
+          <button onClick={loadTasks}>重新整理</button>
+        </div>
+        <div className="segmented filters">
+          {taskFilters.map((item) => (
+            <button key={item.id} className={filter === item.id ? "active" : ""} onClick={() => setFilter(item.id)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {error && <div className="notice error">{error}</div>}
+        <div className="task-list">
+          {filteredTasks.map((task) => (
+            <button className={detail?.id === task.id ? "task-row active" : "task-row"} key={task.id} onClick={() => selectTask(task.id)}>
+              <strong>{task.title}</strong>
+              <span>{stateLabel(task.state)} · {new Date(task.created_at).toLocaleString("zh-TW")}</span>
+              <small>{task.progress[0] ?? task.summary ?? "尚無進度"}</small>
+            </button>
+          ))}
+          {!filteredTasks.length && <p className="muted">目前沒有符合條件的任務。</p>}
+        </div>
+      </section>
+
+      <section className="panel task-detail-panel">
+        {detail ? (
+          <>
+            <div className="panel-heading">
+              <div>
+                <h2>{detail.title}</h2>
+                <p className="muted">{stateLabel(detail.state)} · {detail.workspace_path ?? "未綁定工作區"}</p>
+              </div>
+              <div className="task-actions">
+                <button disabled={["COMPLETED", "FAILED", "CANCELLED"].includes(detail.state)} onClick={() => taskAction("cancel")}>
+                  <Square size={16} />取消
+                </button>
+                <button disabled={detail.state !== "FAILED"} onClick={() => taskAction("retry")}>
+                  <RotateCcw size={16} />重試
+                </button>
+                <button disabled={detail.state !== "WAITING_APPROVAL"} onClick={() => taskAction("continue")}>
+                  <Play size={16} />繼續
+                </button>
+                <button disabled={!detail.undo_record_id} onClick={() => taskAction("undo")}>
+                  <RotateCcw size={16} />Undo
+                </button>
+              </div>
+            </div>
+
+            {detail.state === "WAITING_CLARIFICATION" && (
+              <div className="clarification-box">
+                <label htmlFor="clarification-answer">補充資訊</label>
+                <div className="inline-form">
+                  <input id="clarification-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="例如：依照檔案類型整理" />
+                  <button disabled={!answer.trim()} onClick={submitClarification}>送出</button>
+                </div>
+              </div>
+            )}
+
+            <h3>Step timeline</h3>
+            <ol className="timeline detail-timeline">
+              {detail.steps.map((step, index) => (
+                <li key={`${step.title}-${index}`}>
+                  <strong>{step.title}</strong>
+                  <span>{step.status} · {step.reason}</span>
+                </li>
+              ))}
+            </ol>
+
+            <h3>觀察結果</h3>
+            {detail.observationPreview ? <pre className="preview">{detail.observationPreview}</pre> : <p className="muted">{detail.summary ?? "尚無可顯示的觀察結果。"}</p>}
+
+            <h3>事件</h3>
+            <ol className="timeline detail-timeline">
+              {detail.events.map((event) => (
+                <li key={`${event.event_type}-${event.created_at}`}>
+                  <strong>{event.message}</strong>
+                  <span>{new Date(event.created_at).toLocaleString("zh-TW")}</span>
+                </li>
+              ))}
+            </ol>
+
+            {detail.technicalDetails && (
+              <details>
+                <summary>查看技術詳細資料</summary>
+                <pre className="preview">{JSON.stringify(detail.technicalDetails, null, 2)}</pre>
+              </details>
+            )}
+          </>
+        ) : (
+          <p className="muted">選擇一個任務查看詳細資料。</p>
+        )}
+      </section>
+    </div>
+  );
 }
 
 function AutomationsPage(): React.ReactElement {

@@ -9,7 +9,7 @@ from app.db.session import SessionLocal
 from app.models import ProviderSetting
 
 OPENAI_CREDENTIAL_TARGET = "CLM Assistant Desktop OpenAI API Key"
-DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_MODEL = "gpt-4.1-mini"
 
 
 class ProviderSettingsService:

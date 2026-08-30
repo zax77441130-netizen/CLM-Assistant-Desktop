@@ -74,12 +74,15 @@ class StructuredTaskService:
         try:
             normalized = self.normalize_arguments(db, request)
             tool_name = self.tool_name_for(request.task_type)
+            task.workspace_id = normalized.get("workspace_id")
             action = Action(
                 task_id=task.id,
                 tool_name=tool_name,
                 arguments_hash=argument_hash(normalized),
                 risk_level=self.risk_for(request.task_type),
                 status="PLANNED",
+                workspace_id=normalized.get("workspace_id"),
+                target_path=normalized.get("destination") or normalized.get("path"),
             )
             db.add(action)
             db.flush()
@@ -251,13 +254,13 @@ class StructuredTaskService:
             return file_tools.find_duplicates(root, path)
         if task_type == "CREATE_DIRECTORY":
             result = file_tools.create_directory(root, path)
-            if result.side_effect and self.postcondition_verified(result):
+            if result.side_effect and self.postcondition_verified(result, action.tool_name):
                 target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
                 self.create_undo(db, task, action, "CREATE_DIRECTORY", None, str(target), {}, result.observation)
             return result
         if task_type == "WRITE_NEW_TEXT":
             result = file_tools.write_new_text(root, path, content)
-            if self.postcondition_verified(result):
+            if self.postcondition_verified(result, action.tool_name):
                 target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
                 self.create_undo(db, task, action, "WRITE_NEW_TEXT", None, str(target), {}, result.observation)
             return result
@@ -265,7 +268,7 @@ class StructuredTaskService:
             if not destination:
                 raise ValueError("DESTINATION_REQUIRED")
             result = file_tools.copy_file(root, path, destination) if task_type == "COPY_FILE" else file_tools.move_file(root, path, destination)
-            if self.postcondition_verified(result):
+            if self.postcondition_verified(result, action.tool_name):
                 policy = WorkspacePathPolicy(root)
                 source_abs = policy.resolve_new_child(path).absolute_path if task_type != "COPY_FILE" else policy.resolve_existing(path).absolute_path
                 dest_abs = policy.resolve_existing(destination).absolute_path
@@ -313,7 +316,7 @@ class StructuredTaskService:
         backup_dir = get_settings().data_dir / "backups" / task.id
         result, backup, new_hash = file_tools.overwrite_text_with_backup(args["workspace_root"], args["path"], args.get("content") or "", args["expected_sha256"], backup_dir)
         target = WorkspacePathPolicy(args["workspace_root"]).resolve_existing(args["path"]).absolute_path
-        if self.postcondition_verified(result):
+        if self.postcondition_verified(result, action.tool_name):
             self.create_undo(db, task, action, "OVERWRITE_TEXT", str(target), str(target), {"sha256": args["expected_sha256"]}, {"sha256": new_hash}, backup_path=str(backup))
         return result
 
@@ -322,7 +325,15 @@ class StructuredTaskService:
         task.state = TaskState.COMPLETED if verifier_ok else TaskState.FAILED
         step.state = task.state
         action.status = task.state.value
-        db.add(Observation(action_id=action.id, summary=result.summary, evidence=result.model_dump(mode="json")))
+        db.add(
+            Observation(
+                action_id=action.id,
+                task_id=task.id,
+                workspace_id=action.workspace_id,
+                summary=result.summary,
+                evidence=result.model_dump(mode="json"),
+            )
+        )
         self.audit(db, "task.completed" if verifier_ok else "task.failed", {"task_id": task.id, "result": result.model_dump(mode="json")})
         db.commit()
         undo = db.scalar(select(UndoRecord).where(UndoRecord.action_id == action.id).order_by(UndoRecord.created_at.desc()).limit(1))

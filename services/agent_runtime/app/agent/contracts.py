@@ -84,6 +84,7 @@ class PlanStepSpec(BaseModel):
     tool: str = Field(min_length=1, max_length=160)
     arguments: dict[str, Any] = Field(default_factory=dict)
     reason: str = Field(min_length=1, max_length=500)
+    dependsOn: list[int] = Field(default_factory=list, max_length=5)
 
     @field_validator("tool")
     @classmethod
@@ -94,6 +95,7 @@ class PlanStepSpec(BaseModel):
 
 
 class AgentPlan(BaseModel):
+    version: int = Field(default=1, ge=1)
     goal: str = Field(min_length=1, max_length=500)
     needsClarification: bool
     clarificationQuestion: str | None = Field(default=None, max_length=500)

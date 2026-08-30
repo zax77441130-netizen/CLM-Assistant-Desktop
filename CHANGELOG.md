@@ -25,3 +25,7 @@
 - Fixed Phase 3.1 write-task false success risk by requiring real filesystem postconditions for write tools, rejecting stale workspace grants, preventing assistant write completion without verified observations, and adding a Windows `Test-Path` write smoke.
 - Fixed duplicated LIST_DIRECTORY presentation so the main result shows one Chinese list while technical details stay collapsed.
 - Renamed future migration backups from the fixed `phase2_2` suffix to revision/timestamp-based names.
+- Added Phase 4 reliable multi-step task execution with plan versions, independent plan step state, dependency tracking, task events, idempotency records, workspace/path execution leases, and restart-safe waiting approval state.
+- Added a persisted Chinese Task Center page and APIs for task list/detail, step timeline, observation preview, clarification answers, retry requests, continue requests, cancellation, and undo access.
+- Added the `0005_reliable_task_execution` Alembic migration for task workspace binding, idempotency, action/observation workspace binding, plan step retry/output metadata, task events, execution leases, and idempotency records.
+- Hardened smoke tests so Phase 2/3/3-write/4 runs use unique temporary Runtime data, SQLite, state, workspace, and token values, and Phase 4 smoke verifies the formal AppData database hash remains unchanged.

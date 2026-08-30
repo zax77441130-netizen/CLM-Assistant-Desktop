@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from app.agent.planner import CLARIFY, DeterministicPlannerProvider, FakeOpenAIP
 from app.agent.provider_settings import ProviderSettingsService
 from app.config import RuntimeSettings
 from app.db.migration_manager import migrate_to_head
-from app.models import Action, Observation, PlanStep, TaskState, WorkspaceGrant
+from app.models import Action, ExecutionLease, Observation, PlanStep, Task, TaskEvent, TaskState, WorkspaceGrant
 from app.schemas import AssistantTaskRequest, WorkspaceGrantCreate
 from app.services.structured_task_service import StructuredTaskService
 
@@ -226,9 +227,9 @@ def test_provider_settings_store_key_status_without_returning_secret(db: Session
     service = ProviderSettingsService(db=db, credential_store=store)
     service.set_api_key("test-secret-value-not-real")
     service.set_mode("openai")
-    service.set_model("gpt-5.6-luna")
+    service.set_model("gpt-4.1-mini")
     assert service.api_key_configured() is True
-    assert service.get_model() == "gpt-5.6-luna"
+    assert service.get_model() == "gpt-4.1-mini"
     service.delete_api_key()
     assert service.api_key_configured() is False
 
@@ -243,3 +244,91 @@ def test_fake_openai_provider_generates_safe_plan(db: Session, workspace: str) -
     )
     assert result.providerMode == "openai"
     assert result.state == "COMPLETED"
+
+
+def test_multi_step_read_only_task_records_independent_steps(db: Session, workspace: str) -> None:
+    result = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore())).run(
+        db,
+        AssistantTaskRequest(message="列出目前工作區的檔案，然後找出重複檔案", workspace_id=workspace),
+    )
+    assert result.state == "COMPLETED"
+    steps = db.query(PlanStep).filter(PlanStep.task_id == result.id).order_by(PlanStep.sort_order.asc()).all()
+    assert [step.status for step in steps] == ["COMPLETED", "COMPLETED"]
+    assert steps[1].depends_on_step_id == steps[0].id
+    assert all(step.workspace_id == workspace for step in steps)
+
+
+def test_multi_step_create_and_copy_uses_real_filesystem(db: Session, workspace: str, tmp_path: Path) -> None:
+    result = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore())).run(
+        db,
+        AssistantTaskRequest(message="建立資料夾 文字備份 並複製 example.txt 到 文字備份\\example.txt", workspace_id=workspace),
+    )
+    assert result.state == "COMPLETED"
+    assert (tmp_path / "文字備份").is_dir()
+    assert (tmp_path / "文字備份" / "example.txt").read_text(encoding="utf-8") == "hello"
+    actions = db.query(Action).filter(Action.task_id != result.id).all()
+    assert actions
+    observations = db.query(Observation).filter(Observation.workspace_id == workspace).all()
+    assert any(item.evidence["observation"].get("postcondition", {}).get("verified") for item in observations)
+
+
+def test_failed_step_stops_following_steps(db: Session, workspace: str, tmp_path: Path) -> None:
+    result = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore())).run(
+        db,
+        AssistantTaskRequest(message="建立資料夾 備份 並複製 missing.txt 到 備份\\missing.txt", workspace_id=workspace),
+    )
+    assert result.state == "FAILED"
+    steps = db.query(PlanStep).filter(PlanStep.task_id == result.id).order_by(PlanStep.sort_order.asc()).all()
+    assert steps[0].status == "COMPLETED"
+    assert steps[1].status != "COMPLETED"
+    assert not (tmp_path / "備份" / "missing.txt").exists()
+
+
+def test_idempotency_key_returns_same_task_without_duplicate_execution(db: Session, workspace: str) -> None:
+    orchestrator = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore()))
+    payload = AssistantTaskRequest(message="列出目前工作區的檔案", workspace_id=workspace, idempotency_key="idem-1")
+    first = orchestrator.run(db, payload)
+    second = orchestrator.run(db, payload)
+    assert second.id == first.id
+    assert db.query(Task).filter(Task.idempotency_key == "idem-1").count() == 1
+
+
+def test_path_lock_conflict_fails_closed(db: Session, workspace: str, tmp_path: Path) -> None:
+    other = Task(title="other", state=TaskState.RUNNING, workspace_id=workspace)
+    db.add(other)
+    db.flush()
+    db.add(
+        ExecutionLease(
+            workspace_id=workspace,
+            path_key="測試建立",
+            holder_task_id=other.id,
+            status="HELD",
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+    )
+    db.commit()
+    result = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore())).run(
+        db,
+        AssistantTaskRequest(message="建立資料夾 測試建立", workspace_id=workspace),
+    )
+    assert result.state == "FAILED"
+    assert result.resultText == "這個路徑目前有其他任務正在處理，請稍後再試。"
+    assert not (tmp_path / "測試建立").exists()
+
+
+def test_ai_required_task_does_not_fake_summary_without_key(db: Session, workspace: str) -> None:
+    result = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore())).run(
+        db,
+        AssistantTaskRequest(message="讀取 example.txt，然後建立一份新的摘要檔案", workspace_id=workspace),
+    )
+    assert result.state == "WAITING_CLARIFICATION"
+    assert "啟用 AI 模式" in (result.resultText or "")
+
+
+def test_task_events_record_state_transitions(db: Session, workspace: str) -> None:
+    result = AgentOrchestrator(settings=ProviderSettingsService(db=db, credential_store=FakeCredentialStore())).run(
+        db,
+        AssistantTaskRequest(message="列出目前工作區的檔案", workspace_id=workspace),
+    )
+    events = db.query(TaskEvent).filter(TaskEvent.task_id == result.id).order_by(TaskEvent.created_at.asc()).all()
+    assert [event.to_state for event in events] == ["PLANNING", "QUEUED", "RUNNING", "COMPLETED"]

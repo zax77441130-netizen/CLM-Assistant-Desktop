@@ -14,8 +14,11 @@ describe("IPC allowlist", () => {
     expect(Object.values(IPC_CHANNELS).sort()).toEqual([
       "approval:decide",
       "approval:list",
+      "assistant:answerClarification",
       "assistant:cancelTask",
+      "assistant:continueTask",
       "assistant:createTask",
+      "assistant:retryTask",
       "diagnostics:preloadReady",
       "host:registeredApps",
       "provider:deleteKey",
@@ -28,6 +31,8 @@ describe("IPC allowlist", () => {
       "task:createStructured",
       "task:get",
       "task:list",
+      "taskCenter:get",
+      "taskCenter:list",
       "undo:apply",
       "workspace:list",
       "workspace:select"

@@ -1,15 +1,22 @@
 export type TaskState =
+  | "CREATED"
+  | "PLANNING"
+  | "WAITING_CLARIFICATION"
   | "RECEIVED"
   | "ANALYZING"
   | "NEEDS_INPUT"
   | "PLANNED"
+  | "QUEUED"
   | "RUNNING"
+  | "RETRYING"
+  | "CANCELLING"
   | "WAITING_APPROVAL"
   | "VERIFYING"
   | "COMPLETED"
   | "FAILED"
   | "CANCELLED"
-  | "BLOCKED";
+  | "BLOCKED"
+  | "NEEDS_REVIEW";
 
 export interface RuntimeStatus {
   host: "127.0.0.1";
