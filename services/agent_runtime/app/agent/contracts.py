@@ -41,6 +41,19 @@ ALLOWED_TOOLS = {
     "host.clipboard_read_text",
     "host.clipboard_write_text",
     "host.terminate_process",
+    "desktop.list_windows",
+    "desktop.wait_for_window",
+    "desktop.activate_window",
+    "desktop.get_window_state",
+    "desktop.set_window_state",
+    "desktop.inspect_controls",
+    "desktop.read_control_text",
+    "desktop.invoke_control",
+    "desktop.set_control_text",
+    "desktop.select_item",
+    "desktop.scroll_control",
+    "desktop.close_window",
+    "desktop.capture_window",
 }
 
 
@@ -80,6 +93,19 @@ TOOL_TO_TASK_TYPE = {
     "host.clipboard_read_text": "CLIPBOARD_READ_TEXT",
     "host.clipboard_write_text": "CLIPBOARD_WRITE_TEXT",
     "host.terminate_process": "TERMINATE_PROCESS",
+    "desktop.list_windows": "DESKTOP_LIST_WINDOWS",
+    "desktop.wait_for_window": "DESKTOP_WAIT_FOR_WINDOW",
+    "desktop.activate_window": "DESKTOP_ACTIVATE_WINDOW",
+    "desktop.get_window_state": "DESKTOP_GET_WINDOW_STATE",
+    "desktop.set_window_state": "DESKTOP_SET_WINDOW_STATE",
+    "desktop.inspect_controls": "DESKTOP_INSPECT_CONTROLS",
+    "desktop.read_control_text": "DESKTOP_READ_CONTROL_TEXT",
+    "desktop.invoke_control": "DESKTOP_INVOKE_CONTROL",
+    "desktop.set_control_text": "DESKTOP_SET_CONTROL_TEXT",
+    "desktop.select_item": "DESKTOP_SELECT_ITEM",
+    "desktop.scroll_control": "DESKTOP_SCROLL_CONTROL",
+    "desktop.close_window": "DESKTOP_CLOSE_WINDOW",
+    "desktop.capture_window": "DESKTOP_CAPTURE_WINDOW",
 }
 
 
@@ -99,6 +125,10 @@ READ_ONLY_TOOLS = {
     "host.system_info",
     "host.list_processes",
     "host.list_registered_apps",
+    "desktop.list_windows",
+    "desktop.wait_for_window",
+    "desktop.get_window_state",
+    "desktop.inspect_controls",
 }
 
 
@@ -109,6 +139,13 @@ APPROVAL_REQUIRED_TOOLS = {
     "host.clipboard_read_text",
     "host.launch_registered_app",
     "host.terminate_process",
+    "desktop.read_control_text",
+    "desktop.invoke_control",
+    "desktop.set_control_text",
+    "desktop.select_item",
+    "desktop.scroll_control",
+    "desktop.close_window",
+    "desktop.capture_window",
 }
 
 

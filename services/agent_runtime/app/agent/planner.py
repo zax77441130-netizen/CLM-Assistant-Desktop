@@ -85,6 +85,12 @@ class DeterministicPlannerProvider(PlannerProvider):
             return PlanStepSpec(tool="host.list_processes", arguments={}, reason="查看目前執行中的程序")
         if text in {"查看可以開啟的應用程式", "查看已註冊應用程式", "列出可以開啟的應用程式"}:
             return PlanStepSpec(tool="host.list_registered_apps", arguments={}, reason="查看安全白名單應用程式")
+        if text in {"列出視窗", "列出目前視窗", "查看目前視窗"}:
+            return PlanStepSpec(tool="desktop.list_windows", arguments={}, reason="列出可辨識的桌面視窗")
+        if text in {"開啟記事本", "啟動記事本"}:
+            return PlanStepSpec(tool="host.launch_registered_app", arguments={"app_id": "notepad"}, reason="透過已註冊應用程式開啟記事本")
+        if text in {"切換到檔案總管", "切換到文件總管"}:
+            return PlanStepSpec(tool="desktop.wait_for_window", arguments={"app": "explorer", "timeout_seconds": 10}, reason="尋找已註冊的檔案總管視窗")
         patterns: list[tuple[str, str, dict[str, Any], str]] = [
             (r"^讀取\s+(.+)$", "filesystem.read_text", {"path": 1}, "讀取指定文字檔"),
             (r"^找出工作區內超過\s+([0-9]+)\s*MB\s+的檔案$", "filesystem.find_large_files", {"min_size_mb": 1, "path": "."}, "找出大型檔案"),
@@ -98,6 +104,10 @@ class DeterministicPlannerProvider(PlannerProvider):
             (r"^解壓縮\s+(.+\.zip)\s+到\s+(.+)$", "filesystem.extract_zip", {"path": 1, "destination": 2}, "解壓縮 ZIP 檔案，需核准"),
             (r"^開啟\s+(.+)$", "host.open_workspace_file", {"path": 1}, "開啟工作區內檔案"),
             (r"^把這段文字複製到剪貼簿[:：]\s*(.+)$", "host.clipboard_write_text", {"text": 1}, "寫入文字到剪貼簿"),
+            (r"^把(?:記事本|目前)視窗(最大化|最小化|還原)$", "desktop.set_window_state", {"window_state_label": 1}, "調整已授權視窗狀態"),
+            (r"^在記事本輸入這段文字[:：]\s*(.+)$", "desktop.set_control_text", {"text": 1, "control": {"name": "內容", "controlType": "Edit"}}, "輸入文字到已授權記事本控制項"),
+            (r"^點擊目前視窗中的「?([^」]+)」?按鈕$", "desktop.invoke_control", {"control_name": 1}, "操作已授權視窗中的語意按鈕"),
+            (r"^關閉這個視窗$", "desktop.close_window", {}, "關閉已授權視窗，需要核准"),
             (r"^複製\s+(.+)\s+到\s+(.+)$", "filesystem.copy", {"path": 1, "destination": 2}, "複製工作區內檔案"),
             (r"^移動\s+(.+)\s+到\s+(.+)$", "filesystem.move", {"path": 1, "destination": 2}, "移動工作區內檔案"),
             (r"^將\s+(.+)\s+重新命名為\s+(.+)$", "filesystem.rename", {"path": 1, "destination": 2}, "重新命名工作區內檔案"),
@@ -113,6 +123,13 @@ class DeterministicPlannerProvider(PlannerProvider):
                     arguments["min_size_bytes"] = int(match.group(source).strip()) * 1024 * 1024
                 elif key == "items_csv":
                     arguments["items"] = [{"source": item.strip()} for item in match.group(source).split(",") if item.strip()]
+                elif key == "window_state_label":
+                    label = match.group(source).strip()
+                    arguments["window_state"] = {"最大化": "maximize", "最小化": "minimize", "還原": "restore"}[label]
+                elif key == "control_name":
+                    arguments["control"] = {"name": match.group(source).strip(), "controlType": "Button"}
+                elif isinstance(source, dict):
+                    arguments[key] = source
                 else:
                     arguments[key] = match.group(source).strip() if isinstance(source, int) else source
             if any(not value for value in arguments.values()):

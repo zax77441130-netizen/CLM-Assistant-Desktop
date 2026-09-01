@@ -28,3 +28,13 @@ Deferred final GUI checks:
 - Phase 5 clipboard read requires explicit approval and masks secret-like text.
 - Phase 5 clipboard write reports character count without echoing sensitive content.
 - Phase 5 process termination approval displays stable process identity before acting.
+- Phase 6 live interactive UIA smoke is run from a real Windows desktop session, not WSL/noninteractive service context.
+- Phase 6 live fixture `scripts\fixtures\phase6_uia_fixture.ps1` launches and exposes general text, button, list, status, dangerous button, password control, minimize, maximize, restore, and safe close behavior.
+- Phase 6 opens Notepad through the registered-app path and then binds the target window by identity before acting.
+- Phase 6 can activate, maximize, restore, inspect controls, type normal text into Notepad, and verify postconditions.
+- Phase 6 safe button invocation requires approval when side effects are possible.
+- Phase 6 password/security controls are rejected and no password text appears in UI, SQLite, logs, or screenshots.
+- Phase 6 screenshot capture asks for permission, captures only the authorized target window, and shows only an artifact preview/entry.
+- Phase 6 closing a window requires approval and warns when unsaved content may be lost.
+- Phase 6 generic UIA read-only profile cannot type, invoke, select, scroll, close, or capture arbitrary apps.
+- Phase 6 ambiguous matching windows show understandable candidates and wait for clarification.

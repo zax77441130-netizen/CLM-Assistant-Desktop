@@ -271,6 +271,21 @@ label {
   padding: 12px;
 }
 
+.desktop-observation {
+  background: #f6f8fa;
+  border: 1px solid #d8e0ea;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 12px 0;
+  padding: 12px;
+}
+
+.desktop-observation strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
 .notice {
   background: #fff7ed;
   color: #9a3412;
@@ -416,5 +431,9 @@ dd {
 
   nav button {
     justify-content: center;
+  }
+
+  .desktop-observation {
+    grid-template-columns: 1fr;
   }
 }

@@ -64,6 +64,13 @@ class PlanValidator:
             value = step.arguments.get(key)
             if isinstance(value, str) and self._looks_absolute_or_escape(value):
                 raise ValueError("UNSAFE_PATH_ARGUMENT")
+        if step.tool.startswith("desktop."):
+            forbidden = {"pid", "windowHandle", "hwnd", "executable", "coordinates", "selector", "xpath"}
+            if forbidden.intersection(step.arguments):
+                raise ValueError("UNSAFE_DESKTOP_TARGET_ARGUMENT")
+            control = step.arguments.get("control")
+            if isinstance(control, dict) and forbidden.intersection(control):
+                raise ValueError("UNSAFE_DESKTOP_CONTROL_ARGUMENT")
 
     def _looks_absolute_or_escape(self, value: str) -> bool:
         normalized = value.strip().replace("/", "\\")
@@ -82,6 +89,8 @@ class ExecutionPolicy:
         if step.tool in READ_ONLY_TOOLS:
             return "AUTO"
         if step.tool.startswith("filesystem."):
+            return "AUTO"
+        if step.tool.startswith("desktop."):
             return "AUTO"
         return "BLOCK"
 
@@ -110,6 +119,13 @@ class ToolExecutor:
             recovery_item_id=step.arguments.get("recovery_item_id"),
             process_id=step.arguments.get("process_id"),
             app_id=step.arguments.get("app_id"),
+            app=step.arguments.get("app"),
+            window=step.arguments.get("window"),
+            control=step.arguments.get("control"),
+            window_state=step.arguments.get("window_state"),
+            item_name=step.arguments.get("item_name"),
+            direction=step.arguments.get("direction"),
+            timeout_seconds=int(step.arguments.get("timeout_seconds", 10) or 10),
         )
         return self.service.create_task(db, request)
 
@@ -199,6 +215,19 @@ class ResultPresenter:
         if title == "CLIPBOARD_READ_TEXT" and observation:
             suffix = "，已遮罩疑似秘密" if observation.get("masked") else ""
             return f"已讀取剪貼簿文字，共 {observation.get('characters', 0)} 個字元{suffix}。", observation
+        if title == "DESKTOP_WAIT_FOR_WINDOW" and observation and raw.get("state") == "COMPLETED":
+            return f"已找到「{observation.get('titlePreview', '目標應用程式')}」視窗。", observation
+        if title == "DESKTOP_ACTIVATE_WINDOW" and observation and raw.get("state") == "COMPLETED":
+            return f"已切換到「{observation.get('titlePreview', '目標應用程式')}」。", observation
+        if title == "DESKTOP_SET_WINDOW_STATE" and observation:
+            state_label = {"maximize": "最大化", "minimize": "最小化", "restore": "還原"}.get(str(observation.get("state")), "調整")
+            return f"已將「{observation.get('titlePreview', '目標視窗')}」{state_label}。", observation
+        if title == "DESKTOP_INVOKE_CONTROL" and raw.get("state") == "WAITING_APPROVAL":
+            return "即將操作桌面控制項，此操作可能修改外部狀態，需要你的確認。", observation
+        if title.startswith("DESKTOP_") and raw.get("state") == "WAITING_APPROVAL":
+            return "這個桌面自動化動作需要你先核准。", observation
+        if title.startswith("DESKTOP_") and raw.get("state") == "COMPLETED":
+            return "桌面自動化步驟已完成。", observation
         if title == "CREATE_DIRECTORY" and observation and "path" in observation:
             return f"已在目前工作區建立「{observation['path']}」資料夾。", observation
         if raw.get("state") == "FAILED":

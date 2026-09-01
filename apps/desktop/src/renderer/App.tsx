@@ -293,6 +293,7 @@ function AssistantPage({ status, bridgeReady }: { status: RuntimeStatus | null; 
         {result ? (
           <>
             <p className="result-text">{result.resultText ?? result.summary}</p>
+            <DesktopObservationPanel details={result.technicalDetails} />
             {result.observationPreview && <pre className="preview">{result.observationPreview}</pre>}
             {result.approval_id && (
               <div className="approval-card">
@@ -305,7 +306,7 @@ function AssistantPage({ status, bridgeReady }: { status: RuntimeStatus | null; 
             {result.technicalDetails && (
               <details open={detailsOpen} onToggle={(event) => setDetailsOpen(event.currentTarget.open)}>
                 <summary>查看技術詳細資料</summary>
-                <pre className="preview">{JSON.stringify(result.technicalDetails, null, 2)}</pre>
+                <pre className="preview">{JSON.stringify(maskTechnicalDetails(result.technicalDetails), null, 2)}</pre>
               </details>
             )}
           </>
@@ -497,6 +498,7 @@ function TasksPage(): React.ReactElement {
             </ol>
 
             <h3>觀察結果</h3>
+            <DesktopObservationPanel details={detail.technicalDetails} />
             {detail.observationPreview ? <pre className="preview">{detail.observationPreview}</pre> : <p className="muted">{detail.summary ?? "尚無可顯示的觀察結果。"}</p>}
 
             <h3>事件</h3>
@@ -512,7 +514,7 @@ function TasksPage(): React.ReactElement {
             {detail.technicalDetails && (
               <details>
                 <summary>查看技術詳細資料</summary>
-                <pre className="preview">{JSON.stringify(detail.technicalDetails, null, 2)}</pre>
+                <pre className="preview">{JSON.stringify(maskTechnicalDetails(detail.technicalDetails), null, 2)}</pre>
               </details>
             )}
           </>
@@ -521,6 +523,55 @@ function TasksPage(): React.ReactElement {
         )}
       </section>
     </div>
+  );
+}
+
+function DesktopObservationPanel({ details }: { details?: Record<string, unknown> | null }): React.ReactElement | null {
+  if (!details || typeof details.app !== "string" || !details.app.startsWith("desktop.")) {
+    return null;
+  }
+  const observation = typeof details.observation === "object" && details.observation !== null ? details.observation as Record<string, unknown> : details;
+  const title = typeof observation.titlePreview === "string" && observation.titlePreview ? observation.titlePreview : "目標視窗";
+  const app = typeof observation.app === "string" && observation.app ? observation.app : "已授權應用程式";
+  const state = typeof observation.state === "string" ? observation.state : "已連線";
+  const artifactId = typeof observation.artifactId === "string" ? observation.artifactId : null;
+  return (
+    <div className="desktop-observation">
+      <div>
+        <span className="eyebrow">目前控制中的應用程式</span>
+        <strong>{app}</strong>
+      </div>
+      <div>
+        <span className="eyebrow">Window session</span>
+        <strong>{title}</strong>
+      </div>
+      <div>
+        <span className="eyebrow">最近操作</span>
+        <strong>{state}</strong>
+      </div>
+      {artifactId && (
+        <div>
+          <span className="eyebrow">Screenshot artifact</span>
+          <strong>{artifactId}</strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function maskTechnicalDetails(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => maskTechnicalDetails(item));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const sensitiveKeys = new Set(["pid", "processCreationTime", "windowHandle", "runtimeId", "windowSessionId", "targetFingerprint", "automationId"]);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      sensitiveKeys.has(key) ? "[masked]" : maskTechnicalDetails(item)
+    ])
   );
 }
 

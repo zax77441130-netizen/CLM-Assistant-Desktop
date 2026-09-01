@@ -209,14 +209,52 @@ Legend:
 - Planner support for large-file, ZIP, clipboard, and open-file examples: TESTED
 - PlanValidator policy bypass rejection: TESTED
 - Phase 5 migration `0006_capabilities_recovery`: TESTED
-- Phase 5 Windows smoke script: IMPLEMENTED
-- Live Windows PowerShell smoke from current WSL shell: BLOCKED_EXTERNAL — `powershell.exe` and `pwsh` are not available on PATH in this execution environment
+- Phase 5 Windows smoke script: TESTED
+- Live Windows PowerShell smoke from current WSL shell: TESTED
+- Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
+
+## Phase 6
+
+- DesktopAutomationAdapter interface: TESTED
+- WindowsUIAutomationAdapter production composition: TESTED
+- pywinauto UIA dependency wiring: TESTED
+- psutil process identity binding: TESTED
+- DesktopSessionService: TESTED
+- WindowDiscoveryService: TESTED
+- WindowTargetResolver fingerprint revalidation: TESTED
+- ControlResolver semantic selector validation: TESTED
+- DesktopActionPolicy: TESTED
+- DesktopObservationService: TESTED
+- ScreenArtifactService isolated artifact id: TESTED
+- AutomationPostcondition: TESTED
+- AutomationProfileRegistry for Notepad, File Explorer, Generic UIA Read-only: TESTED
+- desktop.list_windows: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.wait_for_window: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.activate_window: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.get_window_state: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.set_window_state: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.inspect_controls: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.read_control_text: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.invoke_control: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.set_control_text: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.select_item: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.scroll_control: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.close_window: TESTED_WITH_CONTRACT_FIXTURE
+- desktop.capture_window: TESTED_WITH_CONTRACT_FIXTURE
+- CapabilityPolicy desktop capabilities: TESTED
+- Planner desktop tool support: TESTED
+- PlanValidator raw PID/HWND/selector/coordinate rejection: TESTED
+- UI prompt-injection text treated as untrusted observation: TESTED
+- Screenshot artifact isolation and metadata-only result: TESTED
+- Renderer desktop observation card and masked technical details: IMPLEMENTED
+- Phase 6 migration `0007_desktop_automation`: TESTED
+- Phase 6 Windows smoke script: TESTED
+- Live interactive UIA smoke: DEFERRED_BY_USER_NONINTERACTIVE_SESSION
 - Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
 
 ## Explicitly Not Implemented In Phase 1
 
 - Production OpenAI API integration: NOT_IMPLEMENTED
-- Windows UI Automation: NOT_IMPLEMENTED
 - Broad tool execution: NOT_IMPLEMENTED
 - Full autonomous observation/replan loop beyond bounded single-pass MVP: NOT_IMPLEMENTED
 - Installer/updater: NOT_IMPLEMENTED

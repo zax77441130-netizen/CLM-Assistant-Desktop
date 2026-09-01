@@ -122,7 +122,7 @@ def test_phase1_legacy_database_upgrades_to_head_and_keeps_rows(tmp_path: Path) 
     migrate_to_head(settings(tmp_path))
     after = {table: row_count(db_path(tmp_path), table) for table in before}
     assert before == after
-    assert revision(db_path(tmp_path)) == "0006_capabilities_recovery"
+    assert revision(db_path(tmp_path)) == "0007_desktop_automation"
     assert collect_diagnostics(settings(tmp_path)).issues == []
 
 
@@ -137,7 +137,7 @@ def test_phase2_1_partial_database_adds_undo_created_at(tmp_path: Path) -> None:
 def test_phase2_legacy_without_alembic_version_is_baselined(tmp_path: Path) -> None:
     phase2_partial_schema(db_path(tmp_path), with_created_at=True)
     migrate_to_head(settings(tmp_path))
-    assert revision(db_path(tmp_path)) == "0006_capabilities_recovery"
+    assert revision(db_path(tmp_path)) == "0007_desktop_automation"
     assert collect_diagnostics(settings(tmp_path)).issues == []
 
 
@@ -177,6 +177,16 @@ def test_phase5_migration_adds_capability_manifest_and_recovery_tables(tmp_path:
     assert "manifest_hash" in columns(db_path(tmp_path), "batch_manifests")
     assert "source_hash" in columns(db_path(tmp_path), "batch_manifest_items")
     assert "recovery_path" in columns(db_path(tmp_path), "recovery_items")
+
+
+def test_phase6_migration_adds_desktop_automation_tables(tmp_path: Path) -> None:
+    phase2_partial_schema(db_path(tmp_path), with_created_at=True)
+    migrate_to_head(settings(tmp_path))
+    assert "app_id" in columns(db_path(tmp_path), "desktop_sessions")
+    assert "target_fingerprint" in columns(db_path(tmp_path), "window_targets")
+    assert "postcondition" in columns(db_path(tmp_path), "automation_actions")
+    assert "profile" in columns(db_path(tmp_path), "automation_profile_grants")
+    assert "artifact_hash" in columns(db_path(tmp_path), "screen_artifacts")
 
 
 def test_migrated_orm_queries_and_task_list_succeed(tmp_path: Path) -> None:

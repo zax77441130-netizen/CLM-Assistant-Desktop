@@ -134,6 +134,28 @@ Host tools are workspace-bound or privacy-gated. `host.open_workspace_file` and 
 
 The `0006_capabilities_recovery` migration adds `capability_grants`, `batch_manifests`, `batch_manifest_items`, and `recovery_items`. Fresh databases and databases upgraded through `0005_reliable_task_execution` migrate to the new head through Alembic.
 
+## Phase 6 Secure Windows Desktop Automation
+
+Phase 6 adds a bounded desktop automation layer for Windows UI Automation. It is not a coordinate mouse/keyboard controller and it does not execute arbitrary shell, PowerShell, command prompt, scripts, UAC prompts, secure desktop actions, browser web automation, login/payment flows, shutdown/restart/lock operations, or arbitrary executable paths.
+
+The runtime layer is split into `DesktopAutomationAdapter`, `WindowsUIAutomationAdapter`, `DesktopSessionService`, `WindowDiscoveryService`, `WindowTargetResolver`, `ControlResolver`, `DesktopActionPolicy`, `DesktopObservationService`, `ScreenArtifactService`, `AutomationPostcondition`, and `AutomationProfileRegistry`. Production composition uses the real `WindowsUIAutomationAdapter`, backed by pywinauto UIA and psutil process identity metadata. Tests and smoke scripts can select the fake adapter only through explicit isolated test environment variables.
+
+Desktop tools are registered through the same Planner, PlanValidator, ExecutionPolicy, CapabilityPolicy, Tool SDK, approval, observation, postcondition, undo journal, and audit path as file and host tools. Supported tools are `desktop.list_windows`, `desktop.wait_for_window`, `desktop.activate_window`, `desktop.get_window_state`, `desktop.set_window_state`, `desktop.inspect_controls`, `desktop.read_control_text`, `desktop.invoke_control`, `desktop.set_control_text`, `desktop.select_item`, `desktop.scroll_control`, `desktop.close_window`, and `desktop.capture_window`.
+
+Window operations are bound to registered app identity, executable identity, PID, process creation time, window handle, UIA runtime identity, runtime session id, and target fingerprint. Each operation revalidates the current window before acting to reduce PID reuse, handle reuse, window switching, title collision, and impersonation risks. Planner output may describe semantic targets only; it cannot provide PIDs, HWNDs, executable paths, raw selectors, XPath, COM objects, or coordinates.
+
+Control resolution happens inside Runtime. `ControlResolver` matches by semantic name, control type, optional AutomationId, enabled/visible state, supported UIA pattern, and target-window ancestry metadata exposed by the adapter. Password or security controls are rejected, ambiguous controls block safely, and unsupported patterns never fall back to coordinates.
+
+`CapabilityPolicy` now includes desktop capabilities for window listing, activation, state changes, control inspection/read/invoke/write, window close, and screen capture. Read-only discovery and safe window state changes can auto-run for approved app profiles; reading text, writing text, invoking controls, selecting items, scrolling, closing windows, and capturing screenshots require explicit approval or explicit user request depending on their risk class. LLM output cannot reduce the policy decision.
+
+Automation profiles define the supported surface for Windows Notepad, Windows File Explorer, and Generic UIA Read-only. The generic profile can discover, inspect, activate, and change window state only; it cannot click, type, select, scroll, close, or capture without a more specific trusted profile.
+
+Desktop observations treat UI text and UIA trees as untrusted data. General UI shows Chinese task progress and sanitized window/app state. Raw identifiers and technical details are collapsed and masked. Full UI trees and screenshots are not automatically sent to OpenAI.
+
+`desktop.capture_window` captures only the authorized target window into a random-id file under the Runtime artifact directory. SQLite stores only metadata. Screenshot binaries are not written to logs or Git and smoke tests use an isolated artifact directory.
+
+The `0007_desktop_automation` migration adds `desktop_sessions`, `window_targets`, `automation_actions`, `automation_profile_grants`, and `screen_artifacts`. Fresh databases and databases upgraded through `0006_capabilities_recovery` migrate to the new head through Alembic.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

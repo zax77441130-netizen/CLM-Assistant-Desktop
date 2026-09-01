@@ -12,20 +12,22 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.agent.capability_policy import CapabilityDecision, CapabilityPolicy
-from app.core import file_tools, host_tools
+from app.core import desktop_tools, file_tools, host_tools
 from app.core.audit import redact
 from app.core.file_tools import sha256_file
 from app.core.path_policy import WorkspacePathPolicy
 from app.core.tool_sdk import RiskLevel, ToolResult, argument_hash
-from app.models import Action, Approval, Artifact, AuditEvent, BatchManifest, BatchManifestItem, Observation, RecoveryItem, Task, TaskState, TaskStep, UndoRecord, WorkspaceGrant
+from app.models import Action, Approval, Artifact, AuditEvent, AutomationAction, BatchManifest, BatchManifestItem, Observation, RecoveryItem, Task, TaskState, TaskStep, UndoRecord, WorkspaceGrant
 from app.schemas import StructuredTaskRequest, TaskResponse, WorkspaceGrantCreate
 
 
 WORKSPACE_READ_TASKS = {"LIST_DIRECTORY", "WALK", "DIRECTORY_SUMMARY", "FIND_LARGE_FILES", "LIST_BY_EXTENSION", "COMPARE_FILES", "PREVIEW_BATCH", "STAT_PATH", "READ_TEXT", "SEARCH_FILES", "HASH_FILE", "FIND_DUPLICATES"}
 HOST_READ_TASKS = {"SYSTEM_INFO", "LIST_PROCESSES", "LIST_REGISTERED_APPS"}
+DESKTOP_AUTO_TASKS = {"DESKTOP_LIST_WINDOWS", "DESKTOP_WAIT_FOR_WINDOW", "DESKTOP_ACTIVATE_WINDOW", "DESKTOP_GET_WINDOW_STATE", "DESKTOP_SET_WINDOW_STATE", "DESKTOP_INSPECT_CONTROLS"}
+DESKTOP_APPROVAL_TASKS = {"DESKTOP_READ_CONTROL_TEXT", "DESKTOP_INVOKE_CONTROL", "DESKTOP_SET_CONTROL_TEXT", "DESKTOP_SELECT_ITEM", "DESKTOP_SCROLL_CONTROL", "DESKTOP_CLOSE_WINDOW", "DESKTOP_CAPTURE_WINDOW"}
 READ_TASKS = WORKSPACE_READ_TASKS | HOST_READ_TASKS
-WRITE_TASKS = {"CREATE_DIRECTORY", "WRITE_NEW_TEXT", "APPEND_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME", "CREATE_ZIP", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "RESTORE_FROM_RECOVERY_BIN", "OPEN_WORKSPACE_FILE", "OPEN_WORKSPACE_FOLDER", "CLIPBOARD_WRITE_TEXT"}
-HIGH_RISK_TASKS = {"OVERWRITE_TEXT", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "CLIPBOARD_READ_TEXT", "TERMINATE_PROCESS", "LAUNCH_REGISTERED_APP"}
+WRITE_TASKS = {"CREATE_DIRECTORY", "WRITE_NEW_TEXT", "APPEND_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME", "CREATE_ZIP", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "RESTORE_FROM_RECOVERY_BIN", "OPEN_WORKSPACE_FILE", "OPEN_WORKSPACE_FOLDER", "CLIPBOARD_WRITE_TEXT"} | DESKTOP_AUTO_TASKS
+HIGH_RISK_TASKS = {"OVERWRITE_TEXT", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "CLIPBOARD_READ_TEXT", "TERMINATE_PROCESS", "LAUNCH_REGISTERED_APP"} | DESKTOP_APPROVAL_TASKS
 BATCH_TASKS = {"BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME"}
 BATCH_APPROVAL_ITEM_THRESHOLD = 10
 WORKSPACE_BOUND_TASKS = WORKSPACE_READ_TASKS | {
@@ -274,6 +276,19 @@ class StructuredTaskService:
             "CLIPBOARD_READ_TEXT": "host.clipboard_read_text",
             "CLIPBOARD_WRITE_TEXT": "host.clipboard_write_text",
             "TERMINATE_PROCESS": "host.terminate_process",
+            "DESKTOP_LIST_WINDOWS": "desktop.list_windows",
+            "DESKTOP_WAIT_FOR_WINDOW": "desktop.wait_for_window",
+            "DESKTOP_ACTIVATE_WINDOW": "desktop.activate_window",
+            "DESKTOP_GET_WINDOW_STATE": "desktop.get_window_state",
+            "DESKTOP_SET_WINDOW_STATE": "desktop.set_window_state",
+            "DESKTOP_INSPECT_CONTROLS": "desktop.inspect_controls",
+            "DESKTOP_READ_CONTROL_TEXT": "desktop.read_control_text",
+            "DESKTOP_INVOKE_CONTROL": "desktop.invoke_control",
+            "DESKTOP_SET_CONTROL_TEXT": "desktop.set_control_text",
+            "DESKTOP_SELECT_ITEM": "desktop.select_item",
+            "DESKTOP_SCROLL_CONTROL": "desktop.scroll_control",
+            "DESKTOP_CLOSE_WINDOW": "desktop.close_window",
+            "DESKTOP_CAPTURE_WINDOW": "desktop.capture_window",
             "UNDO_ACTION": "undo.apply",
         }[task_type]
 
@@ -305,6 +320,24 @@ class StructuredTaskService:
             return "clipboard.write"
         if task_type == "TERMINATE_PROCESS":
             return "process.terminate"
+        if task_type == "DESKTOP_LIST_WINDOWS":
+            return "desktop.window.list"
+        if task_type in {"DESKTOP_WAIT_FOR_WINDOW", "DESKTOP_ACTIVATE_WINDOW"}:
+            return "desktop.window.activate"
+        if task_type in {"DESKTOP_GET_WINDOW_STATE", "DESKTOP_SET_WINDOW_STATE"}:
+            return "desktop.window.state"
+        if task_type == "DESKTOP_INSPECT_CONTROLS":
+            return "desktop.control.inspect"
+        if task_type == "DESKTOP_READ_CONTROL_TEXT":
+            return "desktop.control.read"
+        if task_type == "DESKTOP_INVOKE_CONTROL":
+            return "desktop.control.invoke"
+        if task_type in {"DESKTOP_SET_CONTROL_TEXT", "DESKTOP_SELECT_ITEM", "DESKTOP_SCROLL_CONTROL"}:
+            return "desktop.control.write"
+        if task_type == "DESKTOP_CLOSE_WINDOW":
+            return "desktop.window.close"
+        if task_type == "DESKTOP_CAPTURE_WINDOW":
+            return "desktop.screen.capture"
         if task_type in WRITE_TASKS:
             return "workspace.write"
         return "workspace.read"
@@ -450,6 +483,43 @@ class StructuredTaskService:
             return host_tools.clipboard_write_text(text)
         if task_type == "TERMINATE_PROCESS":
             return host_tools.terminate_process(int(args.get("process_id") or 0), expected_name=args.get("process_name"))
+        if task_type.startswith("DESKTOP_"):
+            result = self.execute_desktop_task(task_type, args)
+            self.record_automation_action(db, task, action, task_type, result)
+            if task_type == "DESKTOP_SET_WINDOW_STATE" and self.postcondition_verified(result, action.tool_name):
+                self.create_undo(db, task, action, "DESKTOP_WINDOW_STATE", None, None, {"state": "restore"}, {"state": args.get("window_state")})
+            return result
+        raise ValueError("TASK_TYPE_NOT_IMPLEMENTED")
+
+    def execute_desktop_task(self, task_type: str, args: dict[str, Any]) -> ToolResult:
+        target = dict(args.get("window") or {})
+        control = dict(args.get("control") or {})
+        if task_type == "DESKTOP_LIST_WINDOWS":
+            return desktop_tools.list_windows(args.get("app"))
+        if task_type == "DESKTOP_WAIT_FOR_WINDOW":
+            return desktop_tools.wait_for_window(args.get("app") or "", timeout_seconds=int(args.get("timeout_seconds") or 10))
+        if task_type == "DESKTOP_ACTIVATE_WINDOW":
+            return desktop_tools.activate_window(target)
+        if task_type == "DESKTOP_GET_WINDOW_STATE":
+            return desktop_tools.get_window_state(target)
+        if task_type == "DESKTOP_SET_WINDOW_STATE":
+            return desktop_tools.set_window_state(target, args.get("window_state") or "restore")
+        if task_type == "DESKTOP_INSPECT_CONTROLS":
+            return desktop_tools.inspect_controls(target)
+        if task_type == "DESKTOP_READ_CONTROL_TEXT":
+            return desktop_tools.read_control_text(target, control)
+        if task_type == "DESKTOP_INVOKE_CONTROL":
+            return desktop_tools.invoke_control(target, control, approved=True)
+        if task_type == "DESKTOP_SET_CONTROL_TEXT":
+            return desktop_tools.set_control_text(target, control, args.get("text") or "")
+        if task_type == "DESKTOP_SELECT_ITEM":
+            return desktop_tools.select_item(target, control, args.get("item_name") or "")
+        if task_type == "DESKTOP_SCROLL_CONTROL":
+            return desktop_tools.scroll_control(target, control, args.get("direction") or "down")
+        if task_type == "DESKTOP_CLOSE_WINDOW":
+            return desktop_tools.close_window(target)
+        if task_type == "DESKTOP_CAPTURE_WINDOW":
+            return desktop_tools.capture_window(target)
         raise ValueError("TASK_TYPE_NOT_IMPLEMENTED")
 
     def require_overwrite_approval(self, db: Session, task: Task, step: TaskStep, action: Action, args: dict[str, Any]) -> TaskResponse:
@@ -532,6 +602,14 @@ class StructuredTaskService:
             "filesystem.move_to_recovery_bin",
             "filesystem.restore_from_recovery_bin",
             "filesystem.overwrite_text",
+            "desktop.activate_window",
+            "desktop.set_window_state",
+            "desktop.invoke_control",
+            "desktop.set_control_text",
+            "desktop.select_item",
+            "desktop.scroll_control",
+            "desktop.close_window",
+            "desktop.capture_window",
         }:
             return True
         if not result.side_effect:
@@ -714,6 +792,19 @@ class StructuredTaskService:
         db.add(item)
         return item
 
+    def record_automation_action(self, db: Session, task: Task, action: Action, operation: str, result: ToolResult) -> None:
+        postcondition = result.observation.get("postcondition")
+        db.add(
+            AutomationAction(
+                task_id=task.id,
+                action_id=action.id,
+                window_target_id=None,
+                operation=operation,
+                status=result.status,
+                postcondition=postcondition if isinstance(postcondition, dict) else {},
+            )
+        )
+
     def apply_undo(self, undo: UndoRecord) -> None:
         if undo.operation == "CREATE_DIRECTORY" and undo.destination:
             target = Path(undo.destination)
@@ -771,6 +862,8 @@ class StructuredTaskService:
             if original_hash and sha256_file(target) != original_hash:
                 raise ValueError("UNDO_POSTCONDITION_APPEND_RESTORE_FAILED")
             return
+        if undo.operation == "DESKTOP_WINDOW_STATE":
+            raise ValueError("UNDO_REQUIRES_ACTIVE_DESKTOP_SESSION")
         raise ValueError("UNDO_OPERATION_UNSUPPORTED")
 
     def audit(self, db: Session, event_type: str, payload: dict[str, Any]) -> None:

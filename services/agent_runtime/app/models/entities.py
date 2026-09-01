@@ -336,3 +336,65 @@ class RecoveryItem(Base):
     status: Mapped[str] = mapped_column(String(40), default="STORED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DesktopSession(Base):
+    __tablename__ = "desktop_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    app_id: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(40), default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WindowTarget(Base):
+    __tablename__ = "window_targets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(ForeignKey("desktop_sessions.id"))
+    app_id: Mapped[str] = mapped_column(String(80))
+    executable: Mapped[str] = mapped_column(String(240))
+    pid: Mapped[int] = mapped_column(Integer)
+    process_creation_time: Mapped[str] = mapped_column(String(120))
+    window_handle: Mapped[int] = mapped_column(Integer)
+    runtime_id: Mapped[str] = mapped_column(String(240))
+    target_fingerprint: Mapped[str] = mapped_column(String(128))
+    title_preview: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(40), default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class AutomationAction(Base):
+    __tablename__ = "automation_actions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    action_id: Mapped[str] = mapped_column(ForeignKey("actions.id"))
+    window_target_id: Mapped[str | None] = mapped_column(ForeignKey("window_targets.id"), nullable=True)
+    operation: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(40))
+    postcondition: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class AutomationProfileGrant(Base):
+    __tablename__ = "automation_profile_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    app_id: Mapped[str] = mapped_column(String(80))
+    profile: Mapped[str] = mapped_column(String(80))
+    decision: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class ScreenArtifact(Base):
+    __tablename__ = "screen_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    artifact_path: Mapped[str] = mapped_column(Text)
+    artifact_hash: Mapped[str] = mapped_column(String(128))
+    size: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

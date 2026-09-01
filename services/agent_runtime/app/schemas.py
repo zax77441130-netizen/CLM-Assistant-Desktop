@@ -58,6 +58,19 @@ class StructuredTaskRequest(BaseModel):
         "CLIPBOARD_READ_TEXT",
         "CLIPBOARD_WRITE_TEXT",
         "TERMINATE_PROCESS",
+        "DESKTOP_LIST_WINDOWS",
+        "DESKTOP_WAIT_FOR_WINDOW",
+        "DESKTOP_ACTIVATE_WINDOW",
+        "DESKTOP_GET_WINDOW_STATE",
+        "DESKTOP_SET_WINDOW_STATE",
+        "DESKTOP_INSPECT_CONTROLS",
+        "DESKTOP_READ_CONTROL_TEXT",
+        "DESKTOP_INVOKE_CONTROL",
+        "DESKTOP_SET_CONTROL_TEXT",
+        "DESKTOP_SELECT_ITEM",
+        "DESKTOP_SCROLL_CONTROL",
+        "DESKTOP_CLOSE_WINDOW",
+        "DESKTOP_CAPTURE_WINDOW",
         "UNDO_ACTION",
     ]
     workspace_id: str | None = None
@@ -75,6 +88,13 @@ class StructuredTaskRequest(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
     recovery_item_id: str | None = Field(default=None, max_length=80)
     process_id: int | None = Field(default=None, ge=1)
+    app: str | None = Field(default=None, max_length=80)
+    window: dict[str, Any] | None = None
+    control: dict[str, Any] | None = None
+    window_state: str | None = Field(default=None, max_length=20)
+    item_name: str | None = Field(default=None, max_length=240)
+    direction: str | None = Field(default=None, max_length=20)
+    timeout_seconds: int = Field(default=10, gt=0, le=60)
     approval_id: str | None = None
     undo_record_id: str | None = None
     app_id: str | None = None
@@ -249,6 +269,19 @@ def tool_title(tool: str) -> str:
         "host.list_processes": "查看目前程序",
         "host.list_registered_apps": "查看可開啟的應用程式",
         "host.launch_registered_app": "開啟應用程式",
+        "desktop.list_windows": "列出目前視窗",
+        "desktop.wait_for_window": "尋找目標視窗",
+        "desktop.activate_window": "切換到視窗",
+        "desktop.get_window_state": "查看視窗狀態",
+        "desktop.set_window_state": "調整視窗狀態",
+        "desktop.inspect_controls": "檢查視窗控制項",
+        "desktop.read_control_text": "讀取控制項文字",
+        "desktop.invoke_control": "操作控制項",
+        "desktop.set_control_text": "輸入文字",
+        "desktop.select_item": "選擇項目",
+        "desktop.scroll_control": "捲動控制項",
+        "desktop.close_window": "關閉視窗",
+        "desktop.capture_window": "擷取視窗畫面",
     }.get(tool, "執行安全步驟")
 
 
