@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import shutil
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -9,19 +11,41 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.agent.capability_policy import CapabilityDecision, CapabilityPolicy
 from app.core import file_tools, host_tools
 from app.core.audit import redact
 from app.core.file_tools import sha256_file
 from app.core.path_policy import WorkspacePathPolicy
 from app.core.tool_sdk import RiskLevel, ToolResult, argument_hash
-from app.models import Action, Approval, AuditEvent, Observation, Task, TaskState, TaskStep, UndoRecord, WorkspaceGrant
+from app.models import Action, Approval, Artifact, AuditEvent, BatchManifest, BatchManifestItem, Observation, RecoveryItem, Task, TaskState, TaskStep, UndoRecord, WorkspaceGrant
 from app.schemas import StructuredTaskRequest, TaskResponse, WorkspaceGrantCreate
 
 
-WORKSPACE_READ_TASKS = {"LIST_DIRECTORY", "STAT_PATH", "READ_TEXT", "SEARCH_FILES", "HASH_FILE", "FIND_DUPLICATES"}
+WORKSPACE_READ_TASKS = {"LIST_DIRECTORY", "WALK", "DIRECTORY_SUMMARY", "FIND_LARGE_FILES", "LIST_BY_EXTENSION", "COMPARE_FILES", "PREVIEW_BATCH", "STAT_PATH", "READ_TEXT", "SEARCH_FILES", "HASH_FILE", "FIND_DUPLICATES"}
 HOST_READ_TASKS = {"SYSTEM_INFO", "LIST_PROCESSES", "LIST_REGISTERED_APPS"}
 READ_TASKS = WORKSPACE_READ_TASKS | HOST_READ_TASKS
-WRITE_TASKS = {"CREATE_DIRECTORY", "WRITE_NEW_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE"}
+WRITE_TASKS = {"CREATE_DIRECTORY", "WRITE_NEW_TEXT", "APPEND_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME", "CREATE_ZIP", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "RESTORE_FROM_RECOVERY_BIN", "OPEN_WORKSPACE_FILE", "OPEN_WORKSPACE_FOLDER", "CLIPBOARD_WRITE_TEXT"}
+HIGH_RISK_TASKS = {"OVERWRITE_TEXT", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "CLIPBOARD_READ_TEXT", "TERMINATE_PROCESS", "LAUNCH_REGISTERED_APP"}
+BATCH_TASKS = {"BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME"}
+BATCH_APPROVAL_ITEM_THRESHOLD = 10
+WORKSPACE_BOUND_TASKS = WORKSPACE_READ_TASKS | {
+    "CREATE_DIRECTORY",
+    "WRITE_NEW_TEXT",
+    "APPEND_TEXT",
+    "COPY_FILE",
+    "MOVE_FILE",
+    "RENAME_FILE",
+    "BATCH_COPY",
+    "BATCH_MOVE",
+    "BATCH_RENAME",
+    "CREATE_ZIP",
+    "EXTRACT_ZIP",
+    "MOVE_TO_RECOVERY_BIN",
+    "RESTORE_FROM_RECOVERY_BIN",
+    "OPEN_WORKSPACE_FILE",
+    "OPEN_WORKSPACE_FOLDER",
+    "OVERWRITE_TEXT",
+}
 
 
 class StructuredTaskService:
@@ -88,10 +112,15 @@ class StructuredTaskService:
             db.flush()
             self.audit(db, "task.created", {"task_id": task.id, "tool_name": tool_name, "arguments": normalized})
 
-            if request.task_type == "OVERWRITE_TEXT":
+            self.enforce_capability(request.task_type)
+            if request.task_type in BATCH_TASKS and len(normalized.get("items") or []) > BATCH_APPROVAL_ITEM_THRESHOLD:
+                manifest = self.create_batch_manifest(db, task, normalized, request.task_type, list(normalized.get("items") or []))
+                normalized["manifest_id"] = manifest.id
+                action.arguments_hash = argument_hash(normalized)
+                action.risk_level = RiskLevel.HIGH_RISK.value
                 return self.require_overwrite_approval(db, task, step, action, normalized)
-            if request.task_type == "LAUNCH_REGISTERED_APP":
-                action.status = "HUMAN_VERIFICATION_REQUIRED"
+            if request.task_type in HIGH_RISK_TASKS:
+                return self.require_overwrite_approval(db, task, step, action, normalized)
             result = self.execute_normalized(db, task, action, request.task_type, normalized)
             return self.complete_from_result(db, task, step, action, result)
         except Exception as exc:
@@ -137,7 +166,8 @@ class StructuredTaskService:
         approval.status = "APPROVED"
         task.state = TaskState.RUNNING
         try:
-            result = self.execute_overwrite(db, task, action, approval.normalized_arguments)
+            task_type = str(approval.normalized_arguments.get("task_type") or "OVERWRITE_TEXT")
+            result = self.execute_overwrite(db, task, action, approval.normalized_arguments) if task_type == "OVERWRITE_TEXT" else self.execute_normalized(db, task, action, task_type, approval.normalized_arguments)
         except Exception as exc:
             approval.status = "INVALIDATED"
             action.status = "BLOCKED"
@@ -185,7 +215,7 @@ class StructuredTaskService:
 
     def normalize_arguments(self, db: Session, request: StructuredTaskRequest) -> dict[str, Any]:
         data = request.model_dump(exclude_none=True)
-        if request.task_type in WORKSPACE_READ_TASKS | WRITE_TASKS | {"OVERWRITE_TEXT"}:
+        if request.task_type in WORKSPACE_BOUND_TASKS:
             grant = self.get_workspace(db, request.workspace_id)
             data["workspace_root"] = grant.root_path
             data["workspace_id"] = grant.id
@@ -210,6 +240,12 @@ class StructuredTaskService:
     def tool_name_for(self, task_type: str) -> str:
         return {
             "LIST_DIRECTORY": "filesystem.list_directory",
+            "WALK": "filesystem.walk",
+            "DIRECTORY_SUMMARY": "filesystem.directory_summary",
+            "FIND_LARGE_FILES": "filesystem.find_large_files",
+            "LIST_BY_EXTENSION": "filesystem.list_by_extension",
+            "COMPARE_FILES": "filesystem.compare_files",
+            "PREVIEW_BATCH": "filesystem.preview_batch",
             "STAT_PATH": "filesystem.stat",
             "READ_TEXT": "filesystem.read_text",
             "SEARCH_FILES": "filesystem.search",
@@ -217,31 +253,87 @@ class StructuredTaskService:
             "FIND_DUPLICATES": "filesystem.find_duplicates",
             "CREATE_DIRECTORY": "filesystem.create_directory",
             "WRITE_NEW_TEXT": "filesystem.write_new_text",
+            "APPEND_TEXT": "filesystem.append_text",
             "COPY_FILE": "filesystem.copy",
             "MOVE_FILE": "filesystem.move",
             "RENAME_FILE": "filesystem.rename",
+            "BATCH_COPY": "filesystem.batch_copy",
+            "BATCH_MOVE": "filesystem.batch_move",
+            "BATCH_RENAME": "filesystem.batch_rename",
+            "CREATE_ZIP": "filesystem.create_zip",
+            "EXTRACT_ZIP": "filesystem.extract_zip",
+            "MOVE_TO_RECOVERY_BIN": "filesystem.move_to_recovery_bin",
+            "RESTORE_FROM_RECOVERY_BIN": "filesystem.restore_from_recovery_bin",
             "OVERWRITE_TEXT": "filesystem.overwrite_text",
             "SYSTEM_INFO": "host.system_info",
             "LIST_PROCESSES": "host.list_processes",
             "LIST_REGISTERED_APPS": "host.list_registered_apps",
             "LAUNCH_REGISTERED_APP": "host.launch_registered_app",
+            "OPEN_WORKSPACE_FILE": "host.open_workspace_file",
+            "OPEN_WORKSPACE_FOLDER": "host.open_workspace_folder",
+            "CLIPBOARD_READ_TEXT": "host.clipboard_read_text",
+            "CLIPBOARD_WRITE_TEXT": "host.clipboard_write_text",
+            "TERMINATE_PROCESS": "host.terminate_process",
             "UNDO_ACTION": "undo.apply",
         }[task_type]
 
     def risk_for(self, task_type: str) -> str:
-        if task_type == "OVERWRITE_TEXT":
+        if task_type in HIGH_RISK_TASKS:
             return RiskLevel.HIGH_RISK.value
         if task_type in WRITE_TASKS or task_type in {"LAUNCH_REGISTERED_APP", "UNDO_ACTION"}:
             return RiskLevel.WRITE.value
         return RiskLevel.READ.value
+
+    def capability_for(self, task_type: str) -> str:
+        if task_type in WORKSPACE_READ_TASKS:
+            return "workspace.read"
+        if task_type in {"CREATE_ZIP"}:
+            return "archive.create"
+        if task_type == "EXTRACT_ZIP":
+            return "archive.extract"
+        if task_type == "MOVE_TO_RECOVERY_BIN":
+            return "recovery_bin.write"
+        if task_type == "RESTORE_FROM_RECOVERY_BIN":
+            return "recovery_bin.restore"
+        if task_type == "OPEN_WORKSPACE_FILE":
+            return "host.open_file"
+        if task_type == "OPEN_WORKSPACE_FOLDER":
+            return "host.open_folder"
+        if task_type == "CLIPBOARD_READ_TEXT":
+            return "clipboard.read"
+        if task_type == "CLIPBOARD_WRITE_TEXT":
+            return "clipboard.write"
+        if task_type == "TERMINATE_PROCESS":
+            return "process.terminate"
+        if task_type in WRITE_TASKS:
+            return "workspace.write"
+        return "workspace.read"
+
+    def enforce_capability(self, task_type: str) -> None:
+        rule = CapabilityPolicy().decision_for(self.capability_for(task_type))
+        if rule.decision == CapabilityDecision.BLOCKED:
+            raise ValueError("CAPABILITY_BLOCKED")
 
     def execute_normalized(self, db: Session, task: Task, action: Action, task_type: str, args: dict[str, Any]) -> ToolResult:
         root = args.get("workspace_root", "")
         path = args.get("path") or "."
         destination = args.get("destination")
         content = args.get("content") or ""
+        text = args.get("text") or content
         if task_type == "LIST_DIRECTORY":
             return file_tools.list_directory(root, path)
+        if task_type == "WALK":
+            return file_tools.walk(root, path, max_depth=int(args.get("max_depth") or 5), limit=int(args.get("limit") or 100))
+        if task_type == "DIRECTORY_SUMMARY":
+            return file_tools.directory_summary(root, path, max_depth=int(args.get("max_depth") or 5), limit=int(args.get("limit") or 1000))
+        if task_type == "FIND_LARGE_FILES":
+            return file_tools.find_large_files(root, path, min_size_bytes=int(args.get("min_size_bytes") or 100 * 1024 * 1024), max_depth=int(args.get("max_depth") or 5), limit=int(args.get("limit") or 100))
+        if task_type == "LIST_BY_EXTENSION":
+            return file_tools.list_by_extension(root, path, extension=args.get("extension") or "", max_depth=int(args.get("max_depth") or 5), limit=int(args.get("limit") or 100))
+        if task_type == "COMPARE_FILES":
+            return file_tools.compare_files(root, path, args.get("other_path") or args.get("destination") or "")
+        if task_type == "PREVIEW_BATCH":
+            return file_tools.preview_batch(root, list(args.get("items") or []), operation=args.get("operation") or "batch")
         if task_type == "STAT_PATH":
             return file_tools.stat_path(root, path)
         if task_type == "READ_TEXT":
@@ -264,6 +356,12 @@ class StructuredTaskService:
                 target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
                 self.create_undo(db, task, action, "WRITE_NEW_TEXT", None, str(target), {}, result.observation)
             return result
+        if task_type == "APPEND_TEXT":
+            result = file_tools.append_text(root, path, text)
+            if self.postcondition_verified(result, action.tool_name):
+                target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
+                self.create_undo(db, task, action, "APPEND_TEXT", str(target), str(target), {"sha256": result.observation.get("previous_sha256"), "size": result.observation.get("previous_size")}, {"sha256": result.observation.get("sha256")})
+            return result
         if task_type in {"COPY_FILE", "MOVE_FILE", "RENAME_FILE"}:
             if not destination:
                 raise ValueError("DESTINATION_REQUIRED")
@@ -274,6 +372,66 @@ class StructuredTaskService:
                 dest_abs = policy.resolve_existing(destination).absolute_path
                 self.create_undo(db, task, action, task_type, str(source_abs), str(dest_abs), {}, result.observation)
             return result
+        if task_type in {"BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME"}:
+            items = list(args.get("items") or [])
+            manifest = db.get(BatchManifest, args["manifest_id"]) if args.get("manifest_id") else None
+            if manifest is None:
+                manifest = self.create_batch_manifest(db, task, args, task_type, items)
+            self.validate_batch_manifest(db, manifest, args)
+            if task_type == "BATCH_COPY":
+                result = file_tools.batch_copy(root, items)
+                operation = "COPY_FILE"
+            elif task_type == "BATCH_MOVE":
+                result = file_tools.batch_move(root, items)
+                operation = "MOVE_FILE"
+            else:
+                result = file_tools.batch_rename(root, items)
+                operation = "RENAME_FILE"
+            for item in result.observation.get("successes", []):
+                if isinstance(item, dict):
+                    item_action = self.create_batch_item_action(db, task, action, item)
+                    policy = WorkspacePathPolicy(root)
+                    source_abs = policy.root / str(item.get("source"))
+                    destination_abs = policy.resolve_existing(str(item.get("destination"))).absolute_path
+                    self.create_undo(db, task, item_action, operation, str(source_abs), str(destination_abs), {}, {"sha256": item.get("sha256")})
+            manifest.status = "COMPLETED" if not result.observation.get("failures") else "PARTIAL"
+            self.update_batch_manifest_items(db, manifest, result.observation)
+            result.observation["manifest_id"] = manifest.id
+            result.observation["manifest_hash"] = manifest.manifest_hash
+            return result
+        if task_type == "CREATE_ZIP":
+            result = file_tools.create_zip(root, path, [str(item.get("source") or item.get("path") or item) for item in list(args.get("items") or [])])
+            if self.postcondition_verified(result, action.tool_name):
+                target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
+                self.create_undo(db, task, action, "WRITE_NEW_TEXT", None, str(target), {}, {"sha256": result.observation.get("postcondition", {}).get("sha256")})
+            return result
+        if task_type == "EXTRACT_ZIP":
+            result = file_tools.extract_zip(root, path, destination or "")
+            for item in result.observation.get("files", []):
+                if isinstance(item, dict):
+                    self.create_undo(db, task, action, "WRITE_NEW_TEXT", None, str(WorkspacePathPolicy(root).resolve_existing(str(item.get("path"))).absolute_path), {}, {"sha256": item.get("sha256")})
+            return result
+        if task_type == "MOVE_TO_RECOVERY_BIN":
+            recovery_id = args.get("recovery_item_id") or str(uuid.uuid4())
+            recovery_root = str(get_settings().data_dir / "recovery_bin" / args["workspace_id"])
+            result = file_tools.move_to_recovery_bin(root, path, recovery_root, recovery_id)
+            self.create_recovery_item(db, args["workspace_id"], path, recovery_root, recovery_id, result.observation)
+            original = str(WorkspacePathPolicy(root).root / path)
+            recovery_path = str(Path(recovery_root) / recovery_id)
+            self.create_undo(db, task, action, "MOVE_FILE", original, recovery_path, {}, {"sha256": result.observation.get("sha256")})
+            return result
+        if task_type == "RESTORE_FROM_RECOVERY_BIN":
+            recovery_id = args.get("recovery_item_id") or ""
+            recovery_root = str(get_settings().data_dir / "recovery_bin" / args["workspace_id"])
+            result = file_tools.restore_from_recovery_bin(root, path, recovery_root, recovery_id)
+            item = db.get(RecoveryItem, recovery_id)
+            if item:
+                item.status = "RESTORED"
+                item.restored_at = datetime.now(UTC)
+            restored = str(WorkspacePathPolicy(root).resolve_existing(path).absolute_path)
+            recovery_path = str(Path(recovery_root) / recovery_id)
+            self.create_undo(db, task, action, "MOVE_FILE", recovery_path, restored, {}, {"sha256": result.observation.get("sha256")})
+            return result
         if task_type == "SYSTEM_INFO":
             return host_tools.system_info()
         if task_type == "LIST_PROCESSES":
@@ -282,13 +440,24 @@ class StructuredTaskService:
             return host_tools.list_registered_apps()
         if task_type == "LAUNCH_REGISTERED_APP":
             return host_tools.launch_registered_app(args.get("app_id") or "")
+        if task_type == "OPEN_WORKSPACE_FILE":
+            return host_tools.open_workspace_file(root, path)
+        if task_type == "OPEN_WORKSPACE_FOLDER":
+            return host_tools.open_workspace_folder(root, path)
+        if task_type == "CLIPBOARD_READ_TEXT":
+            return host_tools.clipboard_read_text()
+        if task_type == "CLIPBOARD_WRITE_TEXT":
+            return host_tools.clipboard_write_text(text)
+        if task_type == "TERMINATE_PROCESS":
+            return host_tools.terminate_process(int(args.get("process_id") or 0), expected_name=args.get("process_name"))
         raise ValueError("TASK_TYPE_NOT_IMPLEMENTED")
 
     def require_overwrite_approval(self, db: Session, task: Task, step: TaskStep, action: Action, args: dict[str, Any]) -> TaskResponse:
-        root = args["workspace_root"]
-        path = args.get("path") or ""
-        target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
-        args["expected_sha256"] = sha256_file(target)
+        if args.get("task_type") == "OVERWRITE_TEXT":
+            root = args["workspace_root"]
+            path = args.get("path") or ""
+            target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
+            args["expected_sha256"] = sha256_file(target)
         action.arguments_hash = argument_hash(args)
         approval = Approval(
             task_id=task.id,
@@ -299,8 +468,8 @@ class StructuredTaskService:
             exact_arguments=args,
             argument_hash=action.arguments_hash,
             risk_level=RiskLevel.HIGH_RISK.value,
-            working_directory=args["workspace_id"],
-            risk_reason="Overwrite existing file requires exact approval.",
+            working_directory=args.get("workspace_id") or "host",
+            risk_reason=f"{action.tool_name} requires exact approval.",
             status="PENDING",
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
         )
@@ -348,7 +517,22 @@ class StructuredTaskService:
         )
 
     def postcondition_verified(self, result: ToolResult, tool_name: str | None = None) -> bool:
-        if tool_name not in {"filesystem.create_directory", "filesystem.write_new_text", "filesystem.copy", "filesystem.move", "filesystem.rename", "filesystem.overwrite_text"}:
+        if tool_name not in {
+            "filesystem.create_directory",
+            "filesystem.write_new_text",
+            "filesystem.append_text",
+            "filesystem.copy",
+            "filesystem.move",
+            "filesystem.rename",
+            "filesystem.batch_copy",
+            "filesystem.batch_move",
+            "filesystem.batch_rename",
+            "filesystem.create_zip",
+            "filesystem.extract_zip",
+            "filesystem.move_to_recovery_bin",
+            "filesystem.restore_from_recovery_bin",
+            "filesystem.overwrite_text",
+        }:
             return True
         if not result.side_effect:
             return True
@@ -388,6 +572,147 @@ class StructuredTaskService:
         )
         db.add(undo)
         return undo
+
+    def create_batch_manifest(self, db: Session, task: Task, args: dict[str, Any], operation: str, items: list[dict[str, Any]]) -> BatchManifest:
+        policy = WorkspacePathPolicy(args["workspace_root"])
+        prepared = []
+        for item in items:
+            source_text = str(item.get("source") or item.get("path") or "")
+            destination_text = str(item.get("destination") or "")
+            try:
+                source = policy.resolve_existing(source_text).absolute_path
+                prepared.append(
+                    {
+                        "source": source_text,
+                        "destination": destination_text,
+                        "sourceHash": sha256_file(source) if source.is_file() else None,
+                        "size": source.stat().st_size,
+                        "status": "PENDING",
+                        "error": None,
+                    }
+                )
+            except Exception as exc:
+                prepared.append(
+                    {
+                        "source": source_text,
+                        "destination": destination_text,
+                        "sourceHash": None,
+                        "size": 0,
+                        "status": "FAILED",
+                        "error": str(exc),
+                    }
+                )
+        manifest_hash = argument_hash({"workspaceId": args["workspace_id"], "operation": operation, "items": prepared})
+        manifest = BatchManifest(
+            task_id=task.id,
+            workspace_id=args["workspace_id"],
+            operation=operation,
+            arguments_hash=argument_hash(args),
+            manifest_hash=manifest_hash,
+            status="CREATED",
+        )
+        db.add(manifest)
+        db.flush()
+        for item in prepared:
+            db.add(
+                BatchManifestItem(
+                    manifest_id=manifest.id,
+                    source=item["source"],
+                    destination=item["destination"],
+                    source_hash=item["sourceHash"],
+                    size=item["size"],
+                    status=item["status"],
+                    error=item["error"],
+                )
+            )
+        artifact_dir = get_settings().data_dir / "artifacts" / "batch_manifests"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = artifact_dir / f"{manifest.id}.json"
+        artifact_path.write_text(
+            json.dumps(
+                {"workspaceId": args["workspace_id"], "operation": operation, "items": prepared, "manifestHash": manifest_hash},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        manifest.artifact_path = str(artifact_path)
+        db.add(Artifact(task_id=task.id, path=str(artifact_path), kind="batch_manifest"))
+        return manifest
+
+    def validate_batch_manifest(self, db: Session, manifest: BatchManifest, args: dict[str, Any]) -> None:
+        if manifest.workspace_id != args.get("workspace_id"):
+            raise ValueError("BATCH_MANIFEST_WORKSPACE_MISMATCH")
+        if manifest.operation != args.get("task_type"):
+            raise ValueError("BATCH_MANIFEST_OPERATION_MISMATCH")
+        if manifest.arguments_hash != argument_hash({key: value for key, value in args.items() if key != "manifest_id"}):
+            raise ValueError("BATCH_MANIFEST_ARGUMENTS_CHANGED")
+        policy = WorkspacePathPolicy(args["workspace_root"])
+        rows = list(db.scalars(select(BatchManifestItem).where(BatchManifestItem.manifest_id == manifest.id)))
+        for row in rows:
+            if row.status == "FAILED":
+                continue
+            source = policy.resolve_existing(row.source).absolute_path
+            if not source.is_file():
+                raise ValueError("BATCH_SOURCE_NOT_FILE")
+            if row.source_hash and sha256_file(source) != row.source_hash:
+                raise ValueError("FILE_CHANGED_WHILE_WAITING")
+            if source.stat().st_size != row.size:
+                raise ValueError("FILE_CHANGED_WHILE_WAITING")
+
+    def update_batch_manifest_items(self, db: Session, manifest: BatchManifest, observation: dict[str, Any]) -> None:
+        rows = {
+            (row.source, row.destination): row
+            for row in db.scalars(select(BatchManifestItem).where(BatchManifestItem.manifest_id == manifest.id))
+        }
+        for item in observation.get("successes", []):
+            if isinstance(item, dict):
+                row = rows.get((str(item.get("source")), str(item.get("destination"))))
+                if row is not None:
+                    row.status = "COMPLETED"
+                    row.error = None
+        for item in observation.get("failures", []):
+            if isinstance(item, dict):
+                row = rows.get((str(item.get("source")), str(item.get("destination"))))
+                if row is not None:
+                    row.status = "FAILED"
+                    row.error = str(item.get("error") or "")
+
+    def create_batch_item_action(self, db: Session, task: Task, parent_action: Action, item: dict[str, Any]) -> Action:
+        item_action = Action(
+            task_id=task.id,
+            tool_name=f"{parent_action.tool_name}.item",
+            arguments_hash=argument_hash(item),
+            risk_level=parent_action.risk_level,
+            status="COMPLETED",
+            workspace_id=parent_action.workspace_id,
+            target_path=str(item.get("destination") or ""),
+        )
+        db.add(item_action)
+        db.flush()
+        db.add(
+            Observation(
+                action_id=item_action.id,
+                task_id=task.id,
+                workspace_id=item_action.workspace_id,
+                summary="Batch item completed.",
+                evidence={"item": item, "parent_action_id": parent_action.id},
+            )
+        )
+        return item_action
+
+    def create_recovery_item(self, db: Session, workspace_id: str, original_path: str, recovery_root: str, recovery_item_id: str, observation: dict[str, Any]) -> RecoveryItem:
+        item = RecoveryItem(
+            id=recovery_item_id,
+            workspace_id=workspace_id,
+            original_path=original_path,
+            recovery_path=str(Path(recovery_root) / recovery_item_id),
+            sha256=str(observation.get("sha256") or ""),
+            size=int(observation.get("size") or 0),
+            status="STORED",
+        )
+        db.add(item)
+        return item
 
     def apply_undo(self, undo: UndoRecord) -> None:
         if undo.operation == "CREATE_DIRECTORY" and undo.destination:
@@ -431,6 +756,20 @@ class StructuredTaskService:
             shutil.copyfile(backup, target)
             if sha256_file(target) != undo.precondition.get("sha256"):
                 raise ValueError("UNDO_POSTCONDITION_RESTORE_FAILED")
+            return
+        if undo.operation == "APPEND_TEXT" and undo.destination:
+            target = Path(undo.destination)
+            expected = undo.postcondition.get("sha256")
+            original_size = undo.precondition.get("size")
+            original_hash = undo.precondition.get("sha256")
+            if not target.exists() or not isinstance(original_size, int):
+                raise ValueError("UNDO_CONFLICT_FILE_CHANGED")
+            if expected and sha256_file(target) != expected:
+                raise ValueError("UNDO_CONFLICT_FILE_CHANGED")
+            with target.open("r+b") as handle:
+                handle.truncate(original_size)
+            if original_hash and sha256_file(target) != original_hash:
+                raise ValueError("UNDO_POSTCONDITION_APPEND_RESTORE_FAILED")
             return
         raise ValueError("UNDO_OPERATION_UNSUPPORTED")
 

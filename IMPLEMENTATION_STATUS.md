@@ -178,6 +178,41 @@ Legend:
 - OpenAI live connection: BLOCKED_EXTERNAL — requires user-provided OpenAI API key
 - Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
 
+## Phase 5
+
+- filesystem.walk: TESTED
+- filesystem.directory_summary: TESTED
+- filesystem.find_large_files: TESTED
+- filesystem.list_by_extension: TESTED
+- filesystem.compare_files: TESTED
+- filesystem.preview_batch: TESTED
+- filesystem.append_text: TESTED
+- filesystem.batch_copy: TESTED
+- filesystem.batch_move: TESTED
+- filesystem.batch_rename: TESTED
+- filesystem.create_zip: TESTED
+- filesystem.extract_zip: TESTED
+- filesystem.move_to_recovery_bin: TESTED
+- filesystem.restore_from_recovery_bin: TESTED
+- host.open_workspace_file: TESTED_WITH_ADAPTER
+- host.open_workspace_folder: TESTED_WITH_ADAPTER
+- host.clipboard_read_text: TESTED_WITH_ADAPTER
+- host.clipboard_write_text: TESTED_WITH_ADAPTER
+- host.terminate_process: TESTED_WITH_ADAPTER
+- CapabilityPolicy: TESTED
+- Batch Manifest hash/artifact/partial failure tracking: TESTED
+- Batch source revalidation and approval invalidation: TESTED
+- ZIP slip rejection: TESTED
+- ZIP extraction approval: TESTED
+- Recovery Bin move/restore/conflict/quota metadata: TESTED
+- Permanent delete tool absence: TESTED
+- Planner support for large-file, ZIP, clipboard, and open-file examples: TESTED
+- PlanValidator policy bypass rejection: TESTED
+- Phase 5 migration `0006_capabilities_recovery`: TESTED
+- Phase 5 Windows smoke script: IMPLEMENTED
+- Live Windows PowerShell smoke from current WSL shell: BLOCKED_EXTERNAL — `powershell.exe` and `pwsh` are not available on PATH in this execution environment
+- Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
+
 ## Explicitly Not Implemented In Phase 1
 
 - Production OpenAI API integration: NOT_IMPLEMENTED

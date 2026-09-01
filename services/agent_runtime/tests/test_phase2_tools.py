@@ -169,6 +169,10 @@ def test_host_tools_and_arbitrary_executable_rejection(db: Session) -> None:
     apps = run(db, StructuredTaskRequest(task_type="LIST_REGISTERED_APPS"))
     assert apps.state == TaskState.COMPLETED
     launched = run(db, StructuredTaskRequest(task_type="LAUNCH_REGISTERED_APP", app_id="notepad"))
-    assert launched.state == TaskState.COMPLETED
+    assert launched.state == TaskState.WAITING_APPROVAL
+    approved = StructuredTaskService().decide_approval(db, launched.approval_id or "", True)
+    assert approved.state == TaskState.COMPLETED
     rejected = run(db, StructuredTaskRequest(task_type="LAUNCH_REGISTERED_APP", app_id="cmd.exe"))
-    assert rejected.state == TaskState.BLOCKED
+    assert rejected.state == TaskState.WAITING_APPROVAL
+    blocked = StructuredTaskService().decide_approval(db, rejected.approval_id or "", True)
+    assert blocked.state == TaskState.BLOCKED

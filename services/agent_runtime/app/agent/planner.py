@@ -77,6 +77,8 @@ class DeterministicPlannerProvider(PlannerProvider):
             return PlanStepSpec(tool="filesystem.list_directory", arguments={"path": "."}, reason="查看目前工作區內容")
         if text in {"找出工作區裡的重複檔案", "找出重複檔案", "尋找重複檔案"}:
             return PlanStepSpec(tool="filesystem.find_duplicates", arguments={"path": "."}, reason="找出內容相同的檔案")
+        if text in {"目錄摘要", "工作區摘要", "統計工作區"}:
+            return PlanStepSpec(tool="filesystem.directory_summary", arguments={"path": "."}, reason="統計工作區檔案數量與大小")
         if text in {"查看系統資訊", "查看電腦資訊", "系統資訊"}:
             return PlanStepSpec(tool="host.system_info", arguments={}, reason="查看本機系統資訊")
         if text in {"查看目前程序", "查看程序", "列出程序"}:
@@ -85,11 +87,17 @@ class DeterministicPlannerProvider(PlannerProvider):
             return PlanStepSpec(tool="host.list_registered_apps", arguments={}, reason="查看安全白名單應用程式")
         patterns: list[tuple[str, str, dict[str, Any], str]] = [
             (r"^讀取\s+(.+)$", "filesystem.read_text", {"path": 1}, "讀取指定文字檔"),
+            (r"^找出工作區內超過\s+([0-9]+)\s*MB\s+的檔案$", "filesystem.find_large_files", {"min_size_mb": 1, "path": "."}, "找出大型檔案"),
+            (r"^列出\s+(.+)\s+副檔名的檔案$", "filesystem.list_by_extension", {"extension": 1, "path": "."}, "依副檔名列出檔案"),
             (r"^查看\s+(.+)\s+的資訊$", "filesystem.stat", {"path": 1}, "查看指定檔案或資料夾資訊"),
             (r"^計算\s+(.+)\s+的雜湊$", "filesystem.hash_file", {"path": 1}, "計算指定檔案雜湊"),
             (r"^搜尋包含\s+(.+)\s+的檔案$", "filesystem.search", {"query": 1, "path": ".", "search_content": True}, "搜尋檔名或文字內容"),
             (r"^建立(?:一個)?(?:叫做)?「?([^」]+)」?的資料夾$", "filesystem.create_directory", {"path": 1}, "建立新的工作區資料夾"),
             (r"^建立資料夾\s+(.+)$", "filesystem.create_directory", {"path": 1}, "建立新的工作區資料夾"),
+            (r"^把\s+(.+)\s+壓縮成\s+(.+\.zip)$", "filesystem.create_zip", {"items_csv": 1, "path": 2}, "建立 ZIP 壓縮檔"),
+            (r"^解壓縮\s+(.+\.zip)\s+到\s+(.+)$", "filesystem.extract_zip", {"path": 1, "destination": 2}, "解壓縮 ZIP 檔案，需核准"),
+            (r"^開啟\s+(.+)$", "host.open_workspace_file", {"path": 1}, "開啟工作區內檔案"),
+            (r"^把這段文字複製到剪貼簿[:：]\s*(.+)$", "host.clipboard_write_text", {"text": 1}, "寫入文字到剪貼簿"),
             (r"^複製\s+(.+)\s+到\s+(.+)$", "filesystem.copy", {"path": 1, "destination": 2}, "複製工作區內檔案"),
             (r"^移動\s+(.+)\s+到\s+(.+)$", "filesystem.move", {"path": 1, "destination": 2}, "移動工作區內檔案"),
             (r"^將\s+(.+)\s+重新命名為\s+(.+)$", "filesystem.rename", {"path": 1, "destination": 2}, "重新命名工作區內檔案"),
@@ -101,7 +109,12 @@ class DeterministicPlannerProvider(PlannerProvider):
                 continue
             arguments: dict[str, Any] = {}
             for key, source in mapping.items():
-                arguments[key] = match.group(source).strip() if isinstance(source, int) else source
+                if key == "min_size_mb":
+                    arguments["min_size_bytes"] = int(match.group(source).strip()) * 1024 * 1024
+                elif key == "items_csv":
+                    arguments["items"] = [{"source": item.strip()} for item in match.group(source).split(",") if item.strip()]
+                else:
+                    arguments[key] = match.group(source).strip() if isinstance(source, int) else source
             if any(not value for value in arguments.values()):
                 return None
             return PlanStepSpec(tool=tool, arguments=arguments, reason=reason)

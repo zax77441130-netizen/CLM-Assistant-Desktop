@@ -98,8 +98,17 @@ class ToolExecutor:
             path=step.arguments.get("path"),
             destination=step.arguments.get("destination"),
             content=step.arguments.get("content"),
+            text=step.arguments.get("text"),
             query=step.arguments.get("query"),
             search_content=bool(step.arguments.get("search_content", False)),
+            max_depth=int(step.arguments.get("max_depth", 5) or 5),
+            limit=int(step.arguments.get("limit", 100) or 100),
+            min_size_bytes=step.arguments.get("min_size_bytes"),
+            extension=step.arguments.get("extension"),
+            other_path=step.arguments.get("other_path"),
+            items=list(step.arguments.get("items", [])) if isinstance(step.arguments.get("items", []), list) else [],
+            recovery_item_id=step.arguments.get("recovery_item_id"),
+            process_id=step.arguments.get("process_id"),
             app_id=step.arguments.get("app_id"),
         )
         return self.service.create_task(db, request)
@@ -165,6 +174,31 @@ class ResultPresenter:
                 return "沒有找到重複檔案。", observation
             groups = len(duplicates)
             return f"找到 {groups} 組重複檔案。", observation
+        if title == "FIND_LARGE_FILES" and observation and "files" in observation:
+            files = observation.get("files", [])
+            total = int(observation.get("total_size") or 0)
+            return f"已找到 {len(files)} 個超過門檻的檔案，總大小 {self._format_size(total)}。", observation
+        if title in {"BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME"} and observation:
+            postcondition = observation.get("postcondition") if isinstance(observation.get("postcondition"), dict) else {}
+            success_count = int(postcondition.get("success_count") or 0)
+            failure_count = int(postcondition.get("failure_count") or 0)
+            skipped_count = len(observation.get("skipped", [])) if isinstance(observation.get("skipped"), list) else 0
+            label = {"BATCH_COPY": "複製", "BATCH_MOVE": "移動", "BATCH_RENAME": "重新命名"}[title]
+            return f"已{label} {success_count} 個檔案，跳過 {skipped_count} 個，失敗 {failure_count} 個。", observation
+        if title == "CREATE_ZIP" and observation:
+            return f"已建立 ZIP「{observation.get('path')}」，包含 {observation.get('file_count', 0)} 個檔案。", observation
+        if title == "EXTRACT_ZIP" and observation:
+            files = observation.get("files", [])
+            return f"已解壓縮 {len(files)} 個檔案到「{observation.get('destination')}」。", observation
+        if title == "MOVE_TO_RECOVERY_BIN" and observation:
+            return f"已將 {observation.get('path')} 移至助理回收區，可從任務中心復原。", observation
+        if title == "RESTORE_FROM_RECOVERY_BIN" and observation:
+            return f"已從助理回收區復原「{observation.get('path')}」。", observation
+        if title == "CLIPBOARD_WRITE_TEXT" and observation:
+            return f"已將文字複製到剪貼簿，共 {observation.get('characters', 0)} 個字元。", observation
+        if title == "CLIPBOARD_READ_TEXT" and observation:
+            suffix = "，已遮罩疑似秘密" if observation.get("masked") else ""
+            return f"已讀取剪貼簿文字，共 {observation.get('characters', 0)} 個字元{suffix}。", observation
         if title == "CREATE_DIRECTORY" and observation and "path" in observation:
             return f"已在目前工作區建立「{observation['path']}」資料夾。", observation
         if raw.get("state") == "FAILED":
@@ -176,6 +210,16 @@ class ResultPresenter:
         if raw.get("state") == "COMPLETED":
             return "任務已完成。", observation
         return str(raw.get("summary") or "任務已處理。"), observation
+
+    def _format_size(self, size: int) -> str:
+        value = float(size)
+        for unit in ("B", "KB", "MB", "GB", "TB"):
+            if value < 1024 or unit == "TB":
+                if unit == "B":
+                    return f"{int(value)} {unit}"
+                return f"{value:.1f} {unit}"
+            value /= 1024
+        return f"{size} B"
 
 
 class AgentOrchestrator:
@@ -331,7 +375,22 @@ class AgentOrchestrator:
         return dependency.id if dependency else None
 
     def _lock_keys(self, step: PlanStepSpec) -> list[str]:
-        if step.tool not in {"filesystem.create_directory", "filesystem.write_new_text", "filesystem.copy", "filesystem.move", "filesystem.rename", "filesystem.overwrite_text"}:
+        if step.tool not in {
+            "filesystem.create_directory",
+            "filesystem.write_new_text",
+            "filesystem.append_text",
+            "filesystem.copy",
+            "filesystem.move",
+            "filesystem.rename",
+            "filesystem.batch_copy",
+            "filesystem.batch_move",
+            "filesystem.batch_rename",
+            "filesystem.create_zip",
+            "filesystem.extract_zip",
+            "filesystem.move_to_recovery_bin",
+            "filesystem.restore_from_recovery_bin",
+            "filesystem.overwrite_text",
+        }:
             return []
         keys: list[str] = []
         path = step.arguments.get("path")
@@ -340,6 +399,16 @@ class AgentOrchestrator:
             keys.append(path)
         if isinstance(destination, str):
             keys.append(destination)
+        items = step.arguments.get("items")
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    source = item.get("source") or item.get("path")
+                    target = item.get("destination")
+                    if isinstance(source, str):
+                        keys.append(source)
+                    if isinstance(target, str):
+                        keys.append(target)
         return keys
 
     def _attach_tool_observation(self, db: Session, tool_task_id: object, assistant_task_id: str, workspace_id: str | None) -> None:
@@ -367,7 +436,22 @@ class AgentOrchestrator:
     def _step_response_verified(self, step: PlanStepSpec, raw: dict[str, Any]) -> bool:
         if raw.get("state") != "COMPLETED":
             return True
-        if step.tool not in {"filesystem.create_directory", "filesystem.write_new_text", "filesystem.copy", "filesystem.move", "filesystem.rename", "filesystem.overwrite_text"}:
+        if step.tool not in {
+            "filesystem.create_directory",
+            "filesystem.write_new_text",
+            "filesystem.append_text",
+            "filesystem.copy",
+            "filesystem.move",
+            "filesystem.rename",
+            "filesystem.batch_copy",
+            "filesystem.batch_move",
+            "filesystem.batch_rename",
+            "filesystem.create_zip",
+            "filesystem.extract_zip",
+            "filesystem.move_to_recovery_bin",
+            "filesystem.restore_from_recovery_bin",
+            "filesystem.overwrite_text",
+        }:
             return True
         observation = raw.get("observation")
         if not isinstance(observation, dict):

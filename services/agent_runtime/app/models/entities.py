@@ -282,3 +282,57 @@ class IdempotencyRecord(Base):
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
     response: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class CapabilityGrant(Base):
+    __tablename__ = "capability_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    capability: Mapped[str] = mapped_column(String(120))
+    decision: Mapped[str] = mapped_column(String(40))
+    scope: Mapped[str] = mapped_column(String(80), default="default")
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class BatchManifest(Base):
+    __tablename__ = "batch_manifests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    plan_id: Mapped[str | None] = mapped_column(ForeignKey("plans.id"), nullable=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace_grants.id"))
+    operation: Mapped[str] = mapped_column(String(80))
+    arguments_hash: Mapped[str] = mapped_column(String(128))
+    manifest_hash: Mapped[str] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(40), default="CREATED")
+    artifact_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class BatchManifestItem(Base):
+    __tablename__ = "batch_manifest_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    manifest_id: Mapped[str] = mapped_column(ForeignKey("batch_manifests.id"))
+    source: Mapped[str] = mapped_column(Text)
+    destination: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(40), default="PENDING")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class RecoveryItem(Base):
+    __tablename__ = "recovery_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspace_grants.id"))
+    original_path: Mapped[str] = mapped_column(Text)
+    recovery_path: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(String(128))
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(40), default="STORED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

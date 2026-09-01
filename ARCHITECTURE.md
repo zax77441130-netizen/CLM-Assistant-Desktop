@@ -114,6 +114,26 @@ The Task Center UI is a Chinese persisted task view with filtering, status, work
 
 The `0005_reliable_task_execution` migration adds task workspace/idempotency columns, action and observation workspace binding, plan versioning, plan step dependency/retry/output metadata, `task_events`, `execution_leases`, and `idempotency_records`. Fresh databases and databases at `0004_agent_orchestration` migrate to the new head through Alembic.
 
+## Phase 5 Secure Windows File And Host Capabilities
+
+Phase 5 expands the allowed tool surface without introducing arbitrary shell, PowerShell, `cmd.exe`, scripts, or executable path execution. New tools still flow through Planner, PlanValidator, ExecutionPolicy, WorkspacePathPolicy, the Tool SDK, approval, postcondition verification, observations, undo records, and audit events.
+
+Read-only workspace tools now include recursive walking, directory summaries, large-file search, extension listing, file comparison, and batch previews. They enforce workspace-relative paths, recursion depth limits, item limits, output limits, symlink/junction escape checks, and avoid file content reads except where an existing read/search tool explicitly requires it.
+
+Write tools now include append text, batch copy/move/rename, ZIP create/extract, move to assistant recovery bin, and restore from assistant recovery bin. Permanent deletion remains intentionally absent. Low-risk undoable workspace writes can run automatically; high-risk or privacy-sensitive operations require approval.
+
+`CapabilityPolicy` is the centralized capability decision map. Providers and planner output cannot change it. Current capabilities are `workspace.read`, `workspace.write`, `archive.create`, `archive.extract`, `recovery_bin.write`, `recovery_bin.restore`, `host.open_file`, `host.open_folder`, `clipboard.read`, `clipboard.write`, and `process.terminate`, plus permanently blocked `execution.arbitrary` and `file.delete_permanent`.
+
+Batch operations create an immutable `BatchManifest` before execution. The manifest binds task, workspace, operation, arguments hash, per-item source/destination, source hash, size, status, and a manifest hash. Large batches wait for exact approval. Before execution the Runtime revalidates source hashes and sizes, so a file change invalidates the approval. Each successful item receives its own action, observation, and undo record; partial failures are reported as partial results, not as atomic success.
+
+ZIP tools reject absolute paths, drive-qualified paths, `..` traversal, symlink entries, excessive item counts, excessive expanded size, and existing destination conflicts. Extract defaults to no overwrite and requires approval. Every extracted file is resolved through WorkspacePathPolicy and must remain inside the selected workspace.
+
+The assistant recovery bin is app-managed storage under the Runtime data directory, partitioned by workspace id. Recovery items store original workspace path, recovery item id, recovery path, SHA-256, size, status, and timestamps. Moving to the recovery bin requires approval, verifies that the original path is gone and the recovery file exists, and records undo. Restore refuses to overwrite existing workspace files. Automatic permanent cleanup is not implemented.
+
+Host tools are workspace-bound or privacy-gated. `host.open_workspace_file` and `host.open_workspace_folder` use the Windows Shell default handler only for selected workspace paths and reject executable/script extensions plus `.lnk` and `.url`. Clipboard read requires explicit approval, masks secret-like text, does not keep history, and writes no clipboard content to SQLite/logs. Clipboard write reports only character count. Process termination is modeled as high risk and rejects protected process names; production termination must revalidate identity before acting.
+
+The `0006_capabilities_recovery` migration adds `capability_grants`, `batch_manifests`, `batch_manifest_items`, and `recovery_items`. Fresh databases and databases upgraded through `0005_reliable_task_execution` migrate to the new head through Alembic.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

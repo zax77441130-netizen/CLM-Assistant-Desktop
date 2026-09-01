@@ -24,6 +24,12 @@ class WorkspaceGrantResponse(BaseModel):
 class StructuredTaskRequest(BaseModel):
     task_type: Literal[
         "LIST_DIRECTORY",
+        "WALK",
+        "DIRECTORY_SUMMARY",
+        "FIND_LARGE_FILES",
+        "LIST_BY_EXTENSION",
+        "COMPARE_FILES",
+        "PREVIEW_BATCH",
         "STAT_PATH",
         "READ_TEXT",
         "SEARCH_FILES",
@@ -31,22 +37,44 @@ class StructuredTaskRequest(BaseModel):
         "FIND_DUPLICATES",
         "CREATE_DIRECTORY",
         "WRITE_NEW_TEXT",
+        "APPEND_TEXT",
         "COPY_FILE",
         "MOVE_FILE",
         "RENAME_FILE",
+        "BATCH_COPY",
+        "BATCH_MOVE",
+        "BATCH_RENAME",
+        "CREATE_ZIP",
+        "EXTRACT_ZIP",
+        "MOVE_TO_RECOVERY_BIN",
+        "RESTORE_FROM_RECOVERY_BIN",
         "OVERWRITE_TEXT",
         "SYSTEM_INFO",
         "LIST_PROCESSES",
         "LIST_REGISTERED_APPS",
         "LAUNCH_REGISTERED_APP",
+        "OPEN_WORKSPACE_FILE",
+        "OPEN_WORKSPACE_FOLDER",
+        "CLIPBOARD_READ_TEXT",
+        "CLIPBOARD_WRITE_TEXT",
+        "TERMINATE_PROCESS",
         "UNDO_ACTION",
     ]
     workspace_id: str | None = None
     path: str | None = None
     destination: str | None = None
     content: str | None = Field(default=None, max_length=1024 * 1024)
+    text: str | None = Field(default=None, max_length=1024 * 1024)
     query: str | None = Field(default=None, max_length=120)
     search_content: bool = False
+    max_depth: int = Field(default=5, ge=0, le=20)
+    limit: int = Field(default=100, gt=0, le=1000)
+    min_size_bytes: int | None = Field(default=None, ge=0)
+    extension: str | None = Field(default=None, max_length=40)
+    other_path: str | None = None
+    items: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    recovery_item_id: str | None = Field(default=None, max_length=80)
+    process_id: int | None = Field(default=None, ge=1)
     approval_id: str | None = None
     undo_record_id: str | None = None
     app_id: str | None = None
