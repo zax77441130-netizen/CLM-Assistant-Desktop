@@ -156,6 +156,25 @@ Desktop observations treat UI text and UIA trees as untrusted data. General UI s
 
 The `0007_desktop_automation` migration adds `desktop_sessions`, `window_targets`, `automation_actions`, `automation_profile_grants`, and `screen_artifacts`. Fresh databases and databases upgraded through `0006_capabilities_recovery` migrate to the new head through Alembic.
 
+## Phase 7A Engineering Project Context
+
+Phase 7A introduces a bounded, read-only engineering context service on top of the existing
+Workspace Grant. It does not create a second project root or bypass WorkspacePathPolicy.
+
+`ProjectContextService` detects project markers, language and framework families, common
+entrypoints, declared package scripts, and safe Git HEAD metadata. It does not execute Git,
+PowerShell, shell commands, package managers, builds, or tests. Candidate commands are labels
+for a future approved runner and are never executed by this endpoint.
+
+Scanning is bounded by depth, file count, and marker count. Dependency, cache, build, runtime,
+and VCS directories are excluded. Symlinks and Windows junctions are not traversed. Source file
+contents are not returned; only known small metadata files such as `package.json` and `.git/HEAD`
+may be read with explicit size limits.
+
+The authenticated endpoint is
+`GET /api/engineering/projects/{workspace_id}/context`. Missing workspaces fail with 404;
+disabled, missing, or unavailable workspace roots fail closed with 409.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

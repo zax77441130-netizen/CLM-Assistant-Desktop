@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,11 @@ from app.agent.provider_settings import ProviderSettingsService
 from app.agent.orchestrator import AgentOrchestrator, CancellationService
 from app.core import host_tools
 from app.db.session import get_db
+from app.engineering import (
+    EngineeringProjectContextResponse,
+    ProjectContextError,
+    ProjectContextService,
+)
 from app.models import Action, Approval, Clarification, Observation, PlanStep, Task, TaskEvent, TaskState, UndoRecord, WorkspaceGrant
 from app.schemas import (
     ApprovalDecisionRequest,
@@ -90,6 +95,24 @@ def create_workspace(payload: WorkspaceGrantCreate, db: Session = Depends(get_db
 @router.get("/workspaces", response_model=list[WorkspaceGrantResponse], dependencies=[Depends(require_desktop_token)])
 def list_workspaces(db: Session = Depends(get_db)) -> list[WorkspaceGrantResponse]:
     return [workspace_response(grant) for grant in StructuredTaskService().list_workspaces(db)]
+
+
+@router.get(
+    "/engineering/projects/{workspace_id}/context",
+    response_model=EngineeringProjectContextResponse,
+    dependencies=[Depends(require_desktop_token)],
+)
+def get_engineering_project_context(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+) -> EngineeringProjectContextResponse:
+    grant = db.get(WorkspaceGrant, workspace_id)
+    if grant is None:
+        raise HTTPException(status_code=404, detail="WORKSPACE_NOT_FOUND")
+    try:
+        return ProjectContextService().inspect(grant)
+    except ProjectContextError as exc:
+        raise HTTPException(status_code=409, detail=exc.code) from exc
 
 
 @router.post("/tasks/structured", response_model=TaskResponse, dependencies=[Depends(require_desktop_token)])

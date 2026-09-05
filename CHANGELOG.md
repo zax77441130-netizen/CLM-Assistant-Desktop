@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 7A - Engineering Project Context
+
+- Added bounded, read-only engineering project inspection for existing workspace grants.
+- Added project marker, stack, entrypoint, package-script, and safe Git HEAD detection.
+- Added authenticated engineering context API with fail-closed workspace handling.
+- Added scan limits and dependency/cache/build/VCS exclusions without arbitrary command execution.
+- Added automated coverage for detection, ignored dependencies, disabled grants, and missing roots.
+
 ## 0.1.0 - Unreleased
 
 - Established Phase 0 architecture baseline.
