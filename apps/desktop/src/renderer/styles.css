@@ -143,6 +143,77 @@ h2 {
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
 }
 
+.engineering-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.75fr);
+}
+
+.engineering-project,
+.engineering-result {
+  grid-column: 1 / -1;
+}
+
+.engineering-heading-actions,
+.engineering-command-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.workspace-path {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.engineering-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.engineering-info-card {
+  background: #f6f8fa;
+  border: 1px solid #d8e0ea;
+  min-height: 76px;
+  padding: 12px;
+}
+
+.engineering-info-card span,
+.engineering-approval small {
+  color: #657386;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.engineering-info-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.engineering-actions svg,
+.engineering-result > .panel-heading svg {
+  color: #255c99;
+}
+
+.engineering-command-grid button {
+  flex: 1;
+  min-width: 180px;
+}
+
+.engineering-approval > div {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+  min-width: 260px;
+}
+
+.engineering-output {
+  max-height: 420px;
+}
+
 .task-center {
   display: grid;
   gap: 16px;
@@ -417,6 +488,7 @@ dd {
   .shell,
   .assistant-layout,
   .settings-layout,
+  .engineering-layout,
   .task-center {
     grid-template-columns: 1fr;
   }
@@ -426,7 +498,11 @@ dd {
   }
 
   nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .engineering-summary {
+    grid-template-columns: 1fr;
   }
 
   nav button {
