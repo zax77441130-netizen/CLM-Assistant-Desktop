@@ -304,7 +304,7 @@ Legend:
 - Chinese Engineering task and approval presentation: IMPLEMENTED
 - Sanitized bounded command-output panel: IMPLEMENTED
 - Engineering task persistence in Task Center: IMPLEMENTED
-- Phase 7C automated tests: IMPLEMENTED — Windows execution required before TESTED
+- Phase 7C Windows automated validation: TESTED — 92 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
 - Human Windows GUI verification: BLOCKED_EXTERNAL
 
 ## Explicitly Not Implemented In Phase 1
