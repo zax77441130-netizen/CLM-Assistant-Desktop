@@ -71,6 +71,7 @@ class StructuredTaskRequest(BaseModel):
         "DESKTOP_SCROLL_CONTROL",
         "DESKTOP_CLOSE_WINDOW",
         "DESKTOP_CAPTURE_WINDOW",
+        "ENGINEERING_RUN",
         "UNDO_ACTION",
     ]
     workspace_id: str | None = None
@@ -98,6 +99,7 @@ class StructuredTaskRequest(BaseModel):
     approval_id: str | None = None
     undo_record_id: str | None = None
     app_id: str | None = None
+    command_id: str | None = Field(default=None, pattern="^(test|build)$")
 
 
 class TaskResponse(BaseModel):
