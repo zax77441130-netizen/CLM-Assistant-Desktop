@@ -46,8 +46,8 @@ class EngineeringCommandRunner:
         "build": ("scripts/build_desktop.ps1", r".\\scripts\\build_desktop.ps1"),
     }
 
-    def __init__(self, process_factory: Callable[..., Any] = subprocess.Popen) -> None:
-        self._process_factory = process_factory
+    def __init__(self, process_factory: Callable[..., Any] | None = None) -> None:
+        self._process_factory = process_factory or subprocess.Popen
 
     def prepare(
         self,
