@@ -175,6 +175,30 @@ The authenticated endpoint is
 `GET /api/engineering/projects/{workspace_id}/context`. Missing workspaces fail with 404;
 disabled, missing, or unavailable workspace roots fail closed with 409.
 
+## Phase 7B Approved Engineering Command Runner
+
+Phase 7B introduces a deliberately narrow command runner for Windows project validation. API
+callers select only the fixed command ids `test` or `build`; they cannot submit command text,
+arguments, executable paths, or a working directory. The ids resolve only to repository-owned
+`scripts/test_windows.ps1` and `scripts/build_desktop.ps1` inside the active Workspace Grant.
+
+Every engineering command is classified high risk and flows through the existing Task, Action,
+Approval, Observation, CapabilityPolicy, and AuditEvent path. Before approval, Runtime hashes
+the selected script and binds the command id, display label, relative script path, SHA-256,
+timeout, workspace, and command fingerprint into the exact approval arguments. A script change
+while waiting invalidates the approval.
+
+Execution uses an argument array with `shell=False`, a verified absolute path to Windows
+PowerShell under System32, the granted workspace as `cwd`, a reduced environment, no stdin,
+a maximum 60-second timeout, and a 128 KiB output cap. Timeout handling terminates the spawned
+process tree. Output replaces the workspace path and redacts secret-like assignments and
+authorization lines before persistence or display.
+
+Arbitrary shell, command prompt, executable paths, package-manager arguments, interactive
+input, background execution, and commands outside the two trusted repository scripts remain
+blocked. Engineering Center UI, model routing, Git worktrees, and code-review automation remain
+future phases.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:
