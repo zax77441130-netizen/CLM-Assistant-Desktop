@@ -199,6 +199,24 @@ input, background execution, and commands outside the two trusted repository scr
 blocked. Engineering Center UI, model routing, Git worktrees, and code-review automation remain
 future phases.
 
+## Phase 7C Engineering Center
+
+Phase 7C adds a dedicated desktop Engineering Center backed by the Phase 7A read-only project
+context and Phase 7B approved runner. It displays the selected Workspace Grant, detected stacks,
+common entrypoints, bounded scan counts, and safe Git branch/commit metadata.
+
+The Renderer receives two explicit bridge methods only: project-context retrieval and execution
+of a fixed `test` or `build` command id. Main validates workspace identifiers and command ids,
+constructs the fixed `ENGINEERING_RUN` request, sets the bounded timeout, and sends it to Runtime.
+There is no command input, generic IPC, raw tool call, executable path, working-directory input,
+or caller-controlled argument array.
+
+Test and build controls are enabled only when Phase 7A detects the matching repository-owned
+Windows script. Clicking a control creates a waiting-approval task. The page retrieves the
+persisted approval, shows the localized risk reason and expiry, and requires a separate approve
+or reject action. Sanitized command output is shown in a bounded scroll area, while the complete
+task remains available in Task Center.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:
