@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 7B - Approved Engineering Command Runner
+
+- Added fixed `test` and `build` command ids for repository-owned Windows validation scripts.
+- Reused the existing exact approval, workspace, task, observation, capability, and audit flow.
+- Bound approval to the selected script SHA-256 and invalidated changed scripts before execution.
+- Pinned execution to System32 Windows PowerShell with `shell=False`, no stdin, a reduced environment, bounded timeout, and process-tree termination.
+- Added bounded, path-masked, secret-redacted output and regression coverage for command rejection, approval invalidation, timeout, and output limits.
+
 ## Phase 7A - Engineering Project Context
 
 - Added bounded, read-only engineering project inspection for existing workspace grants.
