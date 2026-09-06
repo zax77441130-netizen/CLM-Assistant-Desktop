@@ -230,7 +230,7 @@ export function EngineeringPage({
           </div>
         )}
         {loading === "approve" && <p className="muted">正在執行受控工程腳本，請稍候…</p>}
-        {task?.summary && <p className="result-text">{task.summary}</p>}
+        {task && <p className="result-text">{engineeringTaskSummary(task)}</p>}
         {output && <pre className="preview engineering-output">{output}</pre>}
         {!task && <p className="muted">測試或建置結果會顯示在這裡，完整任務也會保留於任務中心。</p>}
       </section>
@@ -245,6 +245,22 @@ function InfoCard({ title, value }: { title: string; value: string }): React.Rea
       <strong>{value}</strong>
     </div>
   );
+}
+
+function engineeringTaskSummary(task: TaskResult): string {
+  if (task.state === "WAITING_APPROVAL") {
+    return "工程任務已建立，等待你的明確核准。";
+  }
+  if (task.state === "COMPLETED") {
+    return "工程腳本執行完成，結果已保留於任務中心。";
+  }
+  if (task.state === "FAILED") {
+    return "工程腳本執行失敗，請查看下方輸出。";
+  }
+  if (task.state === "BLOCKED") {
+    return "工程任務已拒絕、失效或被安全政策阻擋。";
+  }
+  return task.summary ?? "工程任務處理中。";
 }
 
 function safeEngineeringError(_event: unknown, fallback: string): string {
