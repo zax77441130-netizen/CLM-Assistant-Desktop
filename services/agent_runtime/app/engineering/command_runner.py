@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import re
 import subprocess
 import threading
-
-import psutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -298,12 +297,13 @@ class EngineeringCommandRunner:
         pid = getattr(process, "pid", None)
         if isinstance(pid, int) and pid > 0:
             try:
-                parent = psutil.Process(pid)
+                module = importlib.import_module("psutil")
+                parent = getattr(module, "Process")(pid)
                 children = parent.children(recursive=True)
                 for child in reversed(children):
                     child.kill()
-                psutil.wait_procs(children, timeout=3)
-            except (psutil.Error, OSError):
+                getattr(module, "wait_procs")(children, timeout=3)
+            except Exception:
                 pass
         process.kill()
 
