@@ -190,13 +190,14 @@ def test_request_rejects_unknown_engineering_command(
     db.add(workspace)
     db.commit()
 
-    with pytest.raises(ValueError, match="ENGINEERING_COMMAND_NOT_ALLOWED"):
-        StructuredTaskService().create_task(
-            db,
-            StructuredTaskRequest.model_construct(
-                task_type="ENGINEERING_RUN",
-                workspace_id=workspace.id,
-                command_id="arbitrary",
-                timeout_seconds=10,
-            ),
-        )
+    result = StructuredTaskService().create_task(
+        db,
+        StructuredTaskRequest.model_construct(
+            task_type="ENGINEERING_RUN",
+            workspace_id=workspace.id,
+            command_id="arbitrary",
+            timeout_seconds=10,
+        ),
+    )
+
+    assert result.state == TaskState.BLOCKED
