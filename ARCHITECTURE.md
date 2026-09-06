@@ -224,6 +224,8 @@ Runtime may now resolve those ids from the active project's own markers. Reposit
 validation scripts remain the first choice. When they are absent, a root `package.json` script may
 resolve to npm, pnpm, or yarn, and a Python project marker may resolve `test` to the fixed
 `python -m pytest` action. Missing actions fail closed.
+Python markers use the same bounded four-level, no-link traversal model as project-context
+detection so the UI and execution policy cannot disagree for nested backend layouts.
 
 The approval fingerprint binds the action id, displayed command, runner kind, controlling marker
 path, and marker SHA-256. Callers still cannot provide raw command text, arguments, executables,

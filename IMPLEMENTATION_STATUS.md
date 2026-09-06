@@ -319,6 +319,7 @@ Legend:
 - Repository Windows scripts remain preferred: IMPLEMENTED
 - Root Node package test/build script resolution (npm/pnpm/yarn): IMPLEMENTED
 - Fixed Python `python -m pytest` resolution with project virtualenv preference: IMPLEMENTED
+- Bounded nested Python marker resolution aligned with project-context scan: IMPLEMENTED
 - Manifest/source SHA-256 approval binding and change invalidation: IMPLEMENTED
 - Raw command, argument, executable, path, environment, and timeout Renderer inputs: BLOCKED
 - Linux syntax/compile check: PASSED

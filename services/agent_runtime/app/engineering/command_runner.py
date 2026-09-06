@@ -27,6 +27,23 @@ SECRET_ASSIGNMENT = re.compile(
 ANSI_ESCAPE = re.compile(
     r"(?:\x1B\[[0-?]*[ -/]*[@-~]|\x1B\][^\x07]*(?:\x07|\x1B\\))"
 )
+PYTHON_MARKERS = {"pyproject.toml", "requirements.txt", "Pipfile"}
+MANIFEST_SCAN_IGNORES = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".runtime",
+    ".venv",
+    ".venv-win",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "release",
+    "venv",
+}
+MAX_MANIFEST_DEPTH = 4
 
 
 class EngineeringCommandError(ValueError):
@@ -315,9 +332,31 @@ class EngineeringCommandRunner:
                 display = f"{package_manager} {command_id}"
             return package_manager, "package.json", display
         if command_id == "test":
-            for marker in ("pyproject.toml", "requirements.txt", "Pipfile"):
-                if self._is_regular_file(root / marker):
-                    return "python", marker, "python -m pytest"
+            marker = self._find_python_marker(root)
+            if marker is not None:
+                return "python", marker, "python -m pytest"
+        return None
+
+    def _find_python_marker(self, root: Path) -> str | None:
+        for current, dir_names, file_names in os.walk(
+            root, topdown=True, followlinks=False
+        ):
+            current_path = Path(current)
+            try:
+                depth = len(current_path.relative_to(root).parts)
+            except ValueError:
+                return None
+            dir_names[:] = [
+                name
+                for name in sorted(dir_names)
+                if name not in MANIFEST_SCAN_IGNORES
+                and depth < MAX_MANIFEST_DEPTH
+                and not self._is_directory_link(current_path / name)
+            ]
+            for name in sorted(set(file_names) & PYTHON_MARKERS):
+                candidate = current_path / name
+                if self._is_regular_file(candidate):
+                    return candidate.relative_to(root).as_posix()
         return None
 
     def _package_scripts(self, path: Path) -> set[str]:
@@ -394,6 +433,13 @@ class EngineeringCommandRunner:
             )
         except OSError:
             return False
+
+    def _is_directory_link(self, path: Path) -> bool:
+        try:
+            is_junction = getattr(path, "is_junction", None)
+            return path.is_symlink() or bool(is_junction and is_junction())
+        except OSError:
+            return True
 
     def _powershell_executable(self) -> str:
         if self._powershell_override is not None:

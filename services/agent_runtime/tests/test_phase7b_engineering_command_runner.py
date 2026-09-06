@@ -112,6 +112,28 @@ def test_prepare_detects_python_pytest_and_fails_closed_without_markers(
         runner.prepare(str(tmp_path), "build")
 
 
+def test_prepare_detects_nested_python_marker_within_bounded_scan(
+    tmp_path: Path,
+) -> None:
+    nested = tmp_path / "backend" / "service"
+    nested.mkdir(parents=True)
+    (nested / "requirements.txt").write_text("pytest==8.3.2\n", encoding="utf-8")
+
+    prepared = EngineeringCommandRunner().prepare(str(tmp_path), "test")
+
+    assert prepared.runnerKind == "python"
+    assert prepared.sourceRelativePath == "backend/service/requirements.txt"
+
+
+def test_prepare_ignores_python_marker_beyond_bounded_scan(tmp_path: Path) -> None:
+    nested = tmp_path.joinpath("one", "two", "three", "four", "five")
+    nested.mkdir(parents=True)
+    (nested / "requirements.txt").write_text("pytest==8.3.2\n", encoding="utf-8")
+
+    with pytest.raises(EngineeringCommandError, match="ENGINEERING_COMMAND_UNAVAILABLE"):
+        EngineeringCommandRunner().prepare(str(tmp_path), "test")
+
+
 def test_run_uses_argument_array_no_shell_and_redacts_output(tmp_path: Path) -> None:
     make_workspace(tmp_path)
     calls: list[tuple[list[str], dict[str, Any]]] = []
