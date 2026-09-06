@@ -547,7 +547,14 @@ class StructuredTaskService:
             )
             args["command_fingerprint"] = prepared.fingerprint
             args["command_display"] = prepared.displayCommand
+            args["command_script_sha256"] = prepared.scriptSha256
         action.arguments_hash = argument_hash(args)
+        risk_reason = f"{action.tool_name} requires exact approval."
+        if args.get("task_type") == "ENGINEERING_RUN":
+            risk_reason = (
+                f"Run repository script {args['command_display']} "
+                f"(SHA-256 {str(args['command_script_sha256'])[:12]}...)"
+            )
         approval = Approval(
             task_id=task.id,
             action_id=action.id,
@@ -558,7 +565,7 @@ class StructuredTaskService:
             argument_hash=action.arguments_hash,
             risk_level=RiskLevel.HIGH_RISK.value,
             working_directory=args.get("workspace_id") or "host",
-            risk_reason=f"{action.tool_name} requires exact approval.",
+            risk_reason=risk_reason,
             status="PENDING",
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
         )
