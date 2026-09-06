@@ -71,7 +71,10 @@ class EngineeringCommandRunner:
             raise EngineeringCommandError("ENGINEERING_SCRIPT_UNAVAILABLE") from exc
         if not script.is_file() or script.suffix.lower() != ".ps1":
             raise EngineeringCommandError("ENGINEERING_SCRIPT_INVALID")
-        script_sha256 = self._sha256(script)
+        try:
+            script_sha256 = self._sha256(script)
+        except OSError as exc:
+            raise EngineeringCommandError("ENGINEERING_SCRIPT_UNAVAILABLE") from exc
         fingerprint_payload = {
             "command_id": command_id,
             "script_relative_path": relative_path,
