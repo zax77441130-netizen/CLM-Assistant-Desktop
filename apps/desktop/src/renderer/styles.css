@@ -214,6 +214,30 @@ h2 {
   max-height: 420px;
 }
 
+.engineering-detected-commands,
+.engineering-running {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 14px;
+}
+
+.engineering-detected-commands span {
+  color: #526175;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.engineering-running {
+  background: #eef5fc;
+  border-left: 4px solid #2d67a5;
+  padding: 12px 14px;
+}
+
+.engineering-running span {
+  color: #526175;
+}
+
 .task-center {
   display: grid;
   gap: 16px;

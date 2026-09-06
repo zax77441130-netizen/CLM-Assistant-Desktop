@@ -60,7 +60,7 @@ export function registerIpc(runtime: RuntimeManager): void {
         task_type: "ENGINEERING_RUN",
         workspace_id: validated.workspaceId,
         command_id: validated.commandId,
-        timeout_seconds: 60
+        timeout_seconds: 120
       })
     });
   });
@@ -94,7 +94,7 @@ export function registerIpc(runtime: RuntimeManager): void {
     runtime.runtimeRequest(`/api/approvals/${payload.approvalId}/decision`, {
       method: "POST",
       body: JSON.stringify({ approve: payload.approve })
-    })
+    }, 135_000)
   );
   ipcMain.handle(IPC_CHANNELS.undoAction, (_event, undoRecordId: string) =>
     runtime.runtimeRequest(`/api/undo/${undoRecordId}`, { method: "POST" })

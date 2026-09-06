@@ -305,7 +305,25 @@ Legend:
 - Sanitized bounded command-output panel: IMPLEMENTED
 - Engineering task persistence in Task Center: IMPLEMENTED
 - Phase 7C Windows automated validation: TESTED — 92 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
-- Human Windows GUI verification: BLOCKED_EXTERNAL
+- Human Windows GUI verification: PARTIAL — execution completed, but synchronous waiting looked stuck and raw ANSI/encoding artifacts were visible; addressed in Phase 7D pending retest
+
+## Phase 7D
+
+- Immediate Engineering Center `RUNNING` state and elapsed timer: IMPLEMENTED
+- Persisted final command duration: IMPLEMENTED
+- Duplicate execution prevention while an approved command is running: IMPLEMENTED
+- 120-second bounded engineering command timeout: IMPLEMENTED
+- 135-second Main-to-Runtime response deadline with recovery guidance: IMPLEMENTED
+- ANSI terminal-control removal: IMPLEMENTED
+- UTF-8 with Windows Traditional Chinese output fallback: IMPLEMENTED
+- Repository Windows scripts remain preferred: IMPLEMENTED
+- Root Node package test/build script resolution (npm/pnpm/yarn): IMPLEMENTED
+- Fixed Python `python -m pytest` resolution with project virtualenv preference: IMPLEMENTED
+- Manifest/source SHA-256 approval binding and change invalidation: IMPLEMENTED
+- Raw command, argument, executable, path, environment, and timeout Renderer inputs: BLOCKED
+- Linux syntax/compile check: PASSED
+- Windows automated validation: PENDING
+- Human Windows GUI verification: PENDING
 
 ## Explicitly Not Implemented In Phase 1
 

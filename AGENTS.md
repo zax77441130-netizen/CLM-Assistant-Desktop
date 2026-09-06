@@ -50,3 +50,14 @@ Renderer must not receive the desktop token or submit raw command text, command 
 executable paths, working directories, timeouts, or environment values. The page must show an
 exact approval card before execution and must not claim GUI verification without a human test.
 
+## Phase 7D General Engineering Execution Rules
+
+The fixed `test` and `build` action ids may resolve to repository Windows scripts first, then to
+manifest-declared Node package scripts or the fixed Python `python -m pytest` action. Resolution
+must remain inside the active Workspace Grant and fail closed when no supported marker exists.
+
+Renderer must still never submit command text, argument arrays, executable paths, working
+directories, timeouts, or environment values. The exact approval fingerprint must cover the
+selected action, displayed command, runner kind, controlling project marker, and its SHA-256.
+Execution uses `shell=False`, a reduced environment, bounded output and timeout, secret/path
+redaction, ANSI removal, Windows output decoding, and process-tree termination on timeout.

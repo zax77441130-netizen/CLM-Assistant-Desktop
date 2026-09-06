@@ -95,7 +95,7 @@ class StructuredTaskRequest(BaseModel):
     window_state: str | None = Field(default=None, max_length=20)
     item_name: str | None = Field(default=None, max_length=240)
     direction: str | None = Field(default=None, max_length=20)
-    timeout_seconds: int = Field(default=10, gt=0, le=60)
+    timeout_seconds: int = Field(default=10, gt=0, le=120)
     approval_id: str | None = None
     undo_record_id: str | None = None
     app_id: str | None = None

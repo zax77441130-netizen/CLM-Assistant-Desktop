@@ -217,6 +217,24 @@ persisted approval, shows the localized risk reason and expiry, and requires a s
 or reject action. Sanitized command output is shown in a bounded scroll area, while the complete
 task remains available in Task Center.
 
+## Phase 7D Execution Feedback and General Project Commands
+
+Phase 7D keeps the Renderer contract limited to the fixed `test` and `build` action ids, but the
+Runtime may now resolve those ids from the active project's own markers. Repository-owned Windows
+validation scripts remain the first choice. When they are absent, a root `package.json` script may
+resolve to npm, pnpm, or yarn, and a Python project marker may resolve `test` to the fixed
+`python -m pytest` action. Missing actions fail closed.
+
+The approval fingerprint binds the action id, displayed command, runner kind, controlling marker
+path, and marker SHA-256. Callers still cannot provide raw command text, arguments, executables,
+working directories, environment values, or timeouts. Processes use an argument array with
+`shell=False`, a reduced environment, a 120-second timeout, bounded capture, process-tree
+termination, secret/path redaction, ANSI removal, and UTF-8/Windows Traditional Chinese decoding.
+
+Engineering Center switches to `RUNNING` immediately after approval, hides the stale approval
+card, shows an elapsed timer, prevents duplicate clicks, and allows 135 seconds for the bounded
+Runtime response. Final execution remains persisted in Task Center.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

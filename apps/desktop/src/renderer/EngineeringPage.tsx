@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { RuntimeStatus } from "@clm/contracts";
 import { FolderOpen, GitBranch, Hammer, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import {
@@ -25,6 +25,8 @@ export function EngineeringPage({
   const [task, setTask] = useState<TaskResult | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const executionStartedAt = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ready = bridgeReady && status?.state === "running";
 
@@ -74,6 +76,18 @@ export function EngineeringPage({
       void loadWorkspace();
     }
   }, [ready]);
+
+  useEffect(() => {
+    if (loading !== "approve" || executionStartedAt.current === null) {
+      return undefined;
+    }
+    const updateElapsed = (): void => {
+      setElapsedSeconds(Math.floor((Date.now() - (executionStartedAt.current ?? Date.now())) / 1000));
+    };
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [loading]);
 
   const selectWorkspace = async (): Promise<void> => {
     const bridge = getDesktopBridge();
@@ -128,6 +142,12 @@ export function EngineeringPage({
     }
     setLoading(approve ? "approve" : "reject");
     setError(null);
+    if (approve) {
+      executionStartedAt.current = Date.now();
+      setElapsedSeconds(0);
+      setTask({ ...task, state: "RUNNING", summary: "工程命令執行中。" });
+      setApproval(null);
+    }
     try {
       const decided = await bridge.decideApproval(task.approval_id, approve);
       setTask(decided);
@@ -135,12 +155,13 @@ export function EngineeringPage({
     } catch (event) {
       setError(safeEngineeringError(event, "工程任務核准失敗。"));
     } finally {
+      executionStartedAt.current = null;
       setLoading(null);
     }
   };
 
-  const supportsTest = context?.testCommands.includes(".\\scripts\\test_windows.ps1") ?? false;
-  const supportsBuild = context?.buildCommands.includes(".\\scripts\\build_desktop.ps1") ?? false;
+  const supportsTest = (context?.testCommands.length ?? 0) > 0;
+  const supportsBuild = (context?.buildCommands.length ?? 0) > 0;
   const output = typeof task?.observation?.output === "string" ? task.observation.output : null;
   const gitLabel = context?.git.detected
     ? (context.git.branch ?? "detached") + (context.git.commit ? " · " + context.git.commit.slice(0, 8) : "")
@@ -190,7 +211,13 @@ export function EngineeringPage({
           </div>
           <ShieldCheck size={22} />
         </div>
-        <p className="muted">只允許專案內固定的 Windows 驗證腳本。每次執行都必須再次核准。</p>
+        <p className="muted">只執行由專案標記安全辨識的測試或建置命令。每次執行都必須再次核准。</p>
+        {context && (supportsTest || supportsBuild) && (
+          <div className="engineering-detected-commands">
+            {supportsTest && <span>測試：{context.testCommands[0]}</span>}
+            {supportsBuild && <span>建置：{context.buildCommands[0]}</span>}
+          </div>
+        )}
         <div className="engineering-command-grid">
           <button className="primary-action" disabled={!ready || !supportsTest || loading !== null} onClick={() => runCommand("test")}>
             <Play size={18} />
@@ -198,11 +225,11 @@ export function EngineeringPage({
           </button>
           <button disabled={!ready || !supportsBuild || loading !== null} onClick={() => runCommand("build")}>
             <Hammer size={18} />
-            {loading === "build" ? "準備中" : "執行桌面建置"}
+            {loading === "build" ? "準備中" : "執行專案建置"}
           </button>
         </div>
         {context && !supportsTest && !supportsBuild && (
-          <div className="notice">此工作區沒有受支援的 Windows 測試或建置腳本，因此不會開放執行。</div>
+          <div className="notice">此工作區沒有可安全辨識的測試或建置命令，因此不會開放執行。</div>
         )}
       </section>
 
@@ -229,7 +256,12 @@ export function EngineeringPage({
             </button>
           </div>
         )}
-        {loading === "approve" && <p className="muted">正在執行受控工程腳本，請稍候…</p>}
+        {loading === "approve" && (
+          <div className="engineering-running" role="status" aria-live="polite">
+            <strong>執行中 · {formatElapsed(elapsedSeconds)}</strong>
+            <span>測試與建置可能需要數分鐘；完成後會自動顯示結果，請勿重複點擊。</span>
+          </div>
+        )}
         {task && <p className="result-text">{engineeringTaskSummary(task)}</p>}
         {output && <pre className="preview engineering-output">{output}</pre>}
         {!task && <p className="muted">測試或建置結果會顯示在這裡，完整任務也會保留於任務中心。</p>}
@@ -252,7 +284,10 @@ function engineeringTaskSummary(task: TaskResult): string {
     return "工程任務已建立，等待你的明確核准。";
   }
   if (task.state === "COMPLETED") {
-    return "工程腳本執行完成，結果已保留於任務中心。";
+    const duration = typeof task.observation?.durationSeconds === "number"
+      ? `，用時 ${formatElapsed(Math.round(task.observation.durationSeconds))}`
+      : "";
+    return `工程命令執行完成${duration}，結果已保留於任務中心。`;
   }
   if (task.state === "FAILED") {
     return "工程腳本執行失敗，請查看下方輸出。";
@@ -265,4 +300,10 @@ function engineeringTaskSummary(task: TaskResult): string {
 
 function safeEngineeringError(_event: unknown, fallback: string): string {
   return fallback;
+}
+
+function formatElapsed(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
