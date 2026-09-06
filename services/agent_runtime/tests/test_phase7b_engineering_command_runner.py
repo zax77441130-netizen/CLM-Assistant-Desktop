@@ -84,13 +84,13 @@ def test_prepare_allows_only_fixed_repository_scripts(tmp_path: Path) -> None:
 def test_run_uses_argument_array_no_shell_and_redacts_output(tmp_path: Path) -> None:
     make_workspace(tmp_path)
     calls: list[tuple[list[str], dict[str, Any]]] = []
-    output = f"workspace={tmp_path}\nAPI_KEY=abc123\n".encode()
+    output = f"workspace={tmp_path}\nAPI_KEY=abc123\nAuthorization: Bearer hidden-token\n".encode()
 
     def factory(argv: list[str], **kwargs: Any) -> FakeProcess:
         calls.append((argv, kwargs))
         return FakeProcess(output)
 
-    runner = EngineeringCommandRunner(process_factory=factory)
+    runner = EngineeringCommandRunner(process_factory=factory, powershell_executable="powershell.exe")
     prepared = runner.prepare(str(tmp_path), "test")
     result = runner.run(
         str(tmp_path),
@@ -104,6 +104,7 @@ def test_run_uses_argument_array_no_shell_and_redacts_output(tmp_path: Path) -> 
     assert "<WORKSPACE>" in result.observation["output"]
     assert str(tmp_path) not in result.observation["output"]
     assert "abc123" not in result.observation["output"]
+    assert "hidden-token" not in result.observation["output"]
     assert calls[0][0][0] == "powershell.exe"
     assert calls[0][1]["shell"] is False
     assert calls[0][1]["cwd"] == str(tmp_path.resolve())
@@ -113,7 +114,8 @@ def test_run_uses_argument_array_no_shell_and_redacts_output(tmp_path: Path) -> 
 def test_run_caps_output_and_marks_truncation(tmp_path: Path) -> None:
     make_workspace(tmp_path)
     runner = EngineeringCommandRunner(
-        process_factory=lambda argv, **kwargs: FakeProcess(b"x" * (MAX_OUTPUT_BYTES + 50))
+        process_factory=lambda argv, **kwargs: FakeProcess(b"x" * (MAX_OUTPUT_BYTES + 50)),
+        powershell_executable="powershell.exe",
     )
     prepared = runner.prepare(str(tmp_path), "build")
 
@@ -128,7 +130,8 @@ def test_run_kills_process_after_timeout(tmp_path: Path) -> None:
     make_workspace(tmp_path)
     process = FakeProcess(timeout=True)
     runner = EngineeringCommandRunner(
-        process_factory=lambda argv, **kwargs: process
+        process_factory=lambda argv, **kwargs: process,
+        powershell_executable="powershell.exe",
     )
     prepared = runner.prepare(str(tmp_path), "test")
 
