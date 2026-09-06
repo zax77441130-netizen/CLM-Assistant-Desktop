@@ -25,3 +25,18 @@ Renderer must not receive the desktop session token, call generic IPC, execute r
 Local tools must execute through WorkspaceGrant plus relative paths. Centralized WorkspacePathPolicy is mandatory for filesystem tools.
 
 Overwriting files requires exact approval and backup-backed undo. Permanent delete, unrestricted shell, natural language planning, production LLM calls, and Windows UI Automation are outside Phase 2.
+
+## Phase 7B Engineering Command Rules
+
+Engineering commands must be selected by a fixed command id. Renderer, planners, models, and
+API callers must never supply raw command text, argument arrays, executable paths, or a working
+directory.
+
+Only repository-owned `scripts/test_windows.ps1` and `scripts/build_desktop.ps1` are allowed
+in the first Phase 7B scope. Execution requires an existing Workspace Grant, exact approval,
+a script SHA-256 fingerprint, a bounded timeout, bounded and redacted output, `shell=False`,
+a pinned system PowerShell path, and timeout process-tree termination.
+
+Changing the selected script after approval invalidates the approval. Unknown commands,
+missing scripts, unavailable system PowerShell, and out-of-range timeouts fail closed.
+
