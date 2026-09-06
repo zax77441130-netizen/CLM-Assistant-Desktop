@@ -79,7 +79,7 @@ class ProjectContextService:
         try:
             policy = WorkspacePathPolicy(grant.root_path)
             root = policy.resolve_directory(".").absolute_path
-        except (OSError, PathPolicyError) as exc:
+        except (OSError, RuntimeError, PathPolicyError) as exc:
             raise ProjectContextError("WORKSPACE_UNAVAILABLE") from exc
         markers = self._markers(root)
         stacks = self._stacks(markers)
@@ -317,11 +317,20 @@ class ProjectContextService:
             return None
 
     def _safe_file(self, path: Path) -> bool:
-        return path.is_file() and not self._is_link_or_junction(path)
+        try:
+            return path.is_file() and not self._is_link_or_junction(path)
+        except OSError:
+            return False
 
     def _safe_directory(self, path: Path) -> bool:
-        return path.is_dir() and not self._is_link_or_junction(path)
+        try:
+            return path.is_dir() and not self._is_link_or_junction(path)
+        except OSError:
+            return False
 
     def _is_link_or_junction(self, path: Path) -> bool:
-        is_junction = getattr(path, "is_junction", None)
-        return path.is_symlink() or bool(is_junction and is_junction())
+        try:
+            is_junction = getattr(path, "is_junction", None)
+            return path.is_symlink() or bool(is_junction and is_junction())
+        except OSError:
+            return True
