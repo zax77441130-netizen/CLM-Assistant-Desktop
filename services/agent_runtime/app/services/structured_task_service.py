@@ -552,8 +552,8 @@ class StructuredTaskService:
         risk_reason = f"{action.tool_name} requires exact approval."
         if args.get("task_type") == "ENGINEERING_RUN":
             risk_reason = (
-                f"Run repository script {args['command_display']} "
-                f"(SHA-256 {str(args['command_script_sha256'])[:12]}...)"
+                f"即將執行專案驗證腳本 {args['command_display']}，"
+                f"SHA-256 {str(args['command_script_sha256'])[:12]}...；需要精確核准。"
             )
         approval = Approval(
             task_id=task.id,
