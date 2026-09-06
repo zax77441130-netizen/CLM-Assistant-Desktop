@@ -6,6 +6,8 @@ import os
 import re
 import subprocess
 import threading
+
+import psutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -20,7 +22,7 @@ MAX_OUTPUT_BYTES = 128 * 1024
 MIN_TIMEOUT_SECONDS = 1
 MAX_TIMEOUT_SECONDS = 60
 SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(token|api[_-]?key|secret|password|authorization|cookie)\b(\s*[:=]\s*)([^\s]+)"
+    r"(?im)\b(token|api[_-]?key|secret|password|authorization|cookie)\b(\s*[:=]\s*)[^\r\n]*"
 )
 
 
@@ -46,8 +48,13 @@ class EngineeringCommandRunner:
         "build": ("scripts/build_desktop.ps1", r".\scripts\build_desktop.ps1"),
     }
 
-    def __init__(self, process_factory: Callable[..., Any] | None = None) -> None:
+    def __init__(
+        self,
+        process_factory: Callable[..., Any] | None = None,
+        powershell_executable: str | None = None,
+    ) -> None:
         self._process_factory = process_factory or subprocess.Popen
+        self._powershell_override = powershell_executable
 
     def prepare(
         self,
@@ -103,7 +110,7 @@ class EngineeringCommandRunner:
         root = policy.resolve_directory(".").absolute_path
         script = policy.resolve_existing(prepared.scriptRelativePath).absolute_path
         argv = [
-            "powershell.exe",
+            self._powershell_executable(),
             "-NoLogo",
             "-NoProfile",
             "-NonInteractive",
@@ -155,7 +162,7 @@ class EngineeringCommandRunner:
             try:
                 process.wait(timeout=timeout_seconds)
             except subprocess.TimeoutExpired:
-                process.kill()
+                self._terminate_process_tree(process)
                 process.wait(timeout=5)
                 reader.join(timeout=5)
                 output = self._sanitize_output(b"".join(output_parts), root)
@@ -257,11 +264,45 @@ class EngineeringCommandRunner:
 
     def _sanitize_output(self, output: bytes, root: Path) -> str:
         text = output.decode("utf-8", errors="replace")
-        text = text.replace(str(root), "<WORKSPACE>")
+        text = re.sub(re.escape(str(root)), "<WORKSPACE>", text, flags=re.IGNORECASE)
         return SECRET_ASSIGNMENT.sub(
             lambda match: f"{match.group(1)}{match.group(2)}***REDACTED***",
             text,
         )
+
+    def _powershell_executable(self) -> str:
+        if self._powershell_override is not None:
+            return self._powershell_override
+        system_root = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT")
+        if not system_root:
+            raise EngineeringCommandError("ENGINEERING_EXECUTABLE_UNAVAILABLE")
+        executable = (
+            Path(system_root)
+            / "System32"
+            / "WindowsPowerShell"
+            / "v1.0"
+            / "powershell.exe"
+        )
+        try:
+            executable = executable.resolve(strict=True)
+        except OSError as exc:
+            raise EngineeringCommandError("ENGINEERING_EXECUTABLE_UNAVAILABLE") from exc
+        if not executable.is_file() or executable.name.lower() != "powershell.exe":
+            raise EngineeringCommandError("ENGINEERING_EXECUTABLE_UNAVAILABLE")
+        return str(executable)
+
+    def _terminate_process_tree(self, process: Any) -> None:
+        pid = getattr(process, "pid", None)
+        if isinstance(pid, int) and pid > 0:
+            try:
+                parent = psutil.Process(pid)
+                children = parent.children(recursive=True)
+                for child in reversed(children):
+                    child.kill()
+                psutil.wait_procs(children, timeout=3)
+            except (psutil.Error, OSError):
+                pass
+        process.kill()
 
     def _sha256(self, path: Path) -> str:
         digest = hashlib.sha256()
