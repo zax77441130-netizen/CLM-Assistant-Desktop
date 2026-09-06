@@ -20,7 +20,7 @@ MAX_OUTPUT_BYTES = 128 * 1024
 MIN_TIMEOUT_SECONDS = 1
 MAX_TIMEOUT_SECONDS = 60
 SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\\b(token|api[_-]?key|secret|password|authorization|cookie)\\b(\\s*[:=]\\s*)([^\\s]+)"
+    r"(?i)\b(token|api[_-]?key|secret|password|authorization|cookie)\b(\s*[:=]\s*)([^\s]+)"
 )
 
 
@@ -42,8 +42,8 @@ class EngineeringCommandRunner:
     """Run only repository-owned Windows validation scripts after exact approval."""
 
     COMMANDS = {
-        "test": ("scripts/test_windows.ps1", r".\\scripts\\test_windows.ps1"),
-        "build": ("scripts/build_desktop.ps1", r".\\scripts\\build_desktop.ps1"),
+        "test": ("scripts/test_windows.ps1", r".\scripts\test_windows.ps1"),
+        "build": ("scripts/build_desktop.ps1", r".\scripts\build_desktop.ps1"),
     }
 
     def __init__(self, process_factory: Callable[..., Any] | None = None) -> None:
