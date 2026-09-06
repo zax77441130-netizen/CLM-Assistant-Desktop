@@ -265,9 +265,28 @@ Legend:
 - Authenticated engineering context API: IMPLEMENTED
 - Phase 7A Windows validation: TESTED — 86 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
 - Engineering Center Renderer page: NOT_IMPLEMENTED
-- Approved Git/build/test command runner: NOT_IMPLEMENTED
+- Approved Git/build/test command runner: PARTIAL — Phase 7B allows only exact-approved repository Windows test/build scripts
 - Git worktree lifecycle: NOT_IMPLEMENTED
 - Model router and independent code reviewer: NOT_IMPLEMENTED
+- Human Windows desktop verification: DEFERRED_BY_USER
+
+## Phase 7B
+
+- Fixed engineering command ids (`test`, `build`): IMPLEMENTED
+- Repository-owned Windows script restriction: IMPLEMENTED
+- Existing Workspace Grant boundary reuse: IMPLEMENTED
+- Existing exact approval, Task, Action, Observation, and audit integration: IMPLEMENTED
+- Script SHA-256 approval binding and change invalidation: IMPLEMENTED
+- Pinned System32 Windows PowerShell executable: IMPLEMENTED
+- Raw command, raw arguments, executable path, and working-directory input rejection: IMPLEMENTED
+- Reduced child-process environment and disabled stdin: IMPLEMENTED
+- `shell=False` execution: IMPLEMENTED
+- 60-second timeout and process-tree termination: IMPLEMENTED
+- 128 KiB bounded output with workspace-path and secret redaction: IMPLEMENTED
+- Phase 7B Windows validation: TESTED — 92 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
+- Engineering Center Renderer controls: NOT_IMPLEMENTED
+- General package-manager command catalog: NOT_IMPLEMENTED
+- Git command/worktree lifecycle: NOT_IMPLEMENTED
 - Human Windows desktop verification: DEFERRED_BY_USER
 
 ## Explicitly Not Implemented In Phase 1

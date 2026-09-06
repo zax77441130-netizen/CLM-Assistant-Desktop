@@ -17,6 +17,7 @@ from app.core.audit import redact
 from app.core.file_tools import sha256_file
 from app.core.path_policy import WorkspacePathPolicy
 from app.core.tool_sdk import RiskLevel, ToolResult, argument_hash
+from app.engineering.command_runner import EngineeringCommandRunner
 from app.models import Action, Approval, Artifact, AuditEvent, AutomationAction, BatchManifest, BatchManifestItem, Observation, RecoveryItem, Task, TaskState, TaskStep, UndoRecord, WorkspaceGrant
 from app.schemas import StructuredTaskRequest, TaskResponse, WorkspaceGrantCreate
 
@@ -27,7 +28,7 @@ DESKTOP_AUTO_TASKS = {"DESKTOP_LIST_WINDOWS", "DESKTOP_WAIT_FOR_WINDOW", "DESKTO
 DESKTOP_APPROVAL_TASKS = {"DESKTOP_READ_CONTROL_TEXT", "DESKTOP_INVOKE_CONTROL", "DESKTOP_SET_CONTROL_TEXT", "DESKTOP_SELECT_ITEM", "DESKTOP_SCROLL_CONTROL", "DESKTOP_CLOSE_WINDOW", "DESKTOP_CAPTURE_WINDOW"}
 READ_TASKS = WORKSPACE_READ_TASKS | HOST_READ_TASKS
 WRITE_TASKS = {"CREATE_DIRECTORY", "WRITE_NEW_TEXT", "APPEND_TEXT", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME", "CREATE_ZIP", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "RESTORE_FROM_RECOVERY_BIN", "OPEN_WORKSPACE_FILE", "OPEN_WORKSPACE_FOLDER", "CLIPBOARD_WRITE_TEXT"} | DESKTOP_AUTO_TASKS
-HIGH_RISK_TASKS = {"OVERWRITE_TEXT", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "CLIPBOARD_READ_TEXT", "TERMINATE_PROCESS", "LAUNCH_REGISTERED_APP"} | DESKTOP_APPROVAL_TASKS
+HIGH_RISK_TASKS = {"OVERWRITE_TEXT", "EXTRACT_ZIP", "MOVE_TO_RECOVERY_BIN", "CLIPBOARD_READ_TEXT", "TERMINATE_PROCESS", "LAUNCH_REGISTERED_APP", "ENGINEERING_RUN"} | DESKTOP_APPROVAL_TASKS
 BATCH_TASKS = {"BATCH_COPY", "BATCH_MOVE", "BATCH_RENAME"}
 BATCH_APPROVAL_ITEM_THRESHOLD = 10
 WORKSPACE_BOUND_TASKS = WORKSPACE_READ_TASKS | {
@@ -47,6 +48,7 @@ WORKSPACE_BOUND_TASKS = WORKSPACE_READ_TASKS | {
     "OPEN_WORKSPACE_FILE",
     "OPEN_WORKSPACE_FOLDER",
     "OVERWRITE_TEXT",
+    "ENGINEERING_RUN",
 }
 
 
@@ -289,6 +291,7 @@ class StructuredTaskService:
             "DESKTOP_SCROLL_CONTROL": "desktop.scroll_control",
             "DESKTOP_CLOSE_WINDOW": "desktop.close_window",
             "DESKTOP_CAPTURE_WINDOW": "desktop.capture_window",
+            "ENGINEERING_RUN": "engineering.command.run",
             "UNDO_ACTION": "undo.apply",
         }[task_type]
 
@@ -338,6 +341,8 @@ class StructuredTaskService:
             return "desktop.window.close"
         if task_type == "DESKTOP_CAPTURE_WINDOW":
             return "desktop.screen.capture"
+        if task_type == "ENGINEERING_RUN":
+            return "engineering.command.run"
         if task_type in WRITE_TASKS:
             return "workspace.write"
         return "workspace.read"
@@ -483,6 +488,13 @@ class StructuredTaskService:
             return host_tools.clipboard_write_text(text)
         if task_type == "TERMINATE_PROCESS":
             return host_tools.terminate_process(int(args.get("process_id") or 0), expected_name=args.get("process_name"))
+        if task_type == "ENGINEERING_RUN":
+            return EngineeringCommandRunner().run(
+                root,
+                str(args.get("command_id") or ""),
+                str(args.get("command_fingerprint") or ""),
+                timeout_seconds=int(args.get("timeout_seconds") or 60),
+            )
         if task_type.startswith("DESKTOP_"):
             result = self.execute_desktop_task(task_type, args)
             self.record_automation_action(db, task, action, task_type, result)
@@ -528,7 +540,21 @@ class StructuredTaskService:
             path = args.get("path") or ""
             target = WorkspacePathPolicy(root).resolve_existing(path).absolute_path
             args["expected_sha256"] = sha256_file(target)
+        elif args.get("task_type") == "ENGINEERING_RUN":
+            prepared = EngineeringCommandRunner().prepare(
+                args["workspace_root"],
+                str(args.get("command_id") or ""),
+            )
+            args["command_fingerprint"] = prepared.fingerprint
+            args["command_display"] = prepared.displayCommand
+            args["command_script_sha256"] = prepared.scriptSha256
         action.arguments_hash = argument_hash(args)
+        risk_reason = f"{action.tool_name} requires exact approval."
+        if args.get("task_type") == "ENGINEERING_RUN":
+            risk_reason = (
+                f"Run repository script {args['command_display']} "
+                f"(SHA-256 {str(args['command_script_sha256'])[:12]}...)"
+            )
         approval = Approval(
             task_id=task.id,
             action_id=action.id,
@@ -539,7 +565,7 @@ class StructuredTaskService:
             argument_hash=action.arguments_hash,
             risk_level=RiskLevel.HIGH_RISK.value,
             working_directory=args.get("workspace_id") or "host",
-            risk_reason=f"{action.tool_name} requires exact approval.",
+            risk_reason=risk_reason,
             status="PENDING",
             expires_at=datetime.now(UTC) + timedelta(minutes=10),
         )

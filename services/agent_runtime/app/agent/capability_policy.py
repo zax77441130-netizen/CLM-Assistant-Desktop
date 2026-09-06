@@ -40,6 +40,7 @@ class CapabilityPolicy:
         "desktop.control.write": CapabilityRule("desktop.control.write", CapabilityDecision.APPROVAL_REQUIRED, "寫入桌面應用程式內容需要核准。"),
         "desktop.window.close": CapabilityRule("desktop.window.close", CapabilityDecision.APPROVAL_REQUIRED, "關閉視窗可能造成未儲存內容遺失，需要核准。"),
         "desktop.screen.capture": CapabilityRule("desktop.screen.capture", CapabilityDecision.APPROVAL_REQUIRED, "擷取視窗畫面需要核准。"),
+        "engineering.command.run": CapabilityRule("engineering.command.run", CapabilityDecision.APPROVAL_REQUIRED, "執行專案測試或建置腳本需要精確核准。"),
         "execution.arbitrary": CapabilityRule("execution.arbitrary", CapabilityDecision.BLOCKED, "任意命令與任意 executable path 永久禁止。"),
         "file.delete_permanent": CapabilityRule("file.delete_permanent", CapabilityDecision.BLOCKED, "永久刪除延後，且未來必須最高風險核准。"),
     }
