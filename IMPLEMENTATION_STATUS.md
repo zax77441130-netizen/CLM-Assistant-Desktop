@@ -324,7 +324,7 @@ Legend:
 - Raw command, argument, executable, path, environment, and timeout Renderer inputs: BLOCKED
 - Linux syntax/compile check: PASSED
 - Windows automated validation: TESTED — 99 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
-- Human Windows GUI verification: PENDING
+- Human Windows GUI verification: TESTED — CLM shows immediate RUNNING state and elapsed time; DOS/Python reaches exact approval and executes the detected pytest command, then returns a clean missing-pytest environment error
 
 ## Explicitly Not Implemented In Phase 1
 
