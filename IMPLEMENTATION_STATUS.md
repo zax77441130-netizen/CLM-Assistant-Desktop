@@ -264,7 +264,7 @@ Legend:
 - Symlink and junction traversal rejection: IMPLEMENTED
 - Authenticated engineering context API: IMPLEMENTED
 - Phase 7A Windows validation: TESTED — 86 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
-- Engineering Center Renderer page: NOT_IMPLEMENTED
+- Engineering Center Renderer page: IMPLEMENTED — Phase 7C
 - Approved Git/build/test command runner: PARTIAL — Phase 7B allows only exact-approved repository Windows test/build scripts
 - Git worktree lifecycle: NOT_IMPLEMENTED
 - Model router and independent code reviewer: NOT_IMPLEMENTED
@@ -284,10 +284,28 @@ Legend:
 - 60-second timeout and process-tree termination: IMPLEMENTED
 - 128 KiB bounded output with workspace-path and secret redaction: IMPLEMENTED
 - Phase 7B Windows validation: TESTED — 92 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
-- Engineering Center Renderer controls: NOT_IMPLEMENTED
+- Engineering Center Renderer controls: IMPLEMENTED — Phase 7C
 - General package-manager command catalog: NOT_IMPLEMENTED
 - Git command/worktree lifecycle: NOT_IMPLEMENTED
 - Human Windows desktop verification: DEFERRED_BY_USER
+
+## Phase 7C
+
+- Engineering Center navigation and responsive page: IMPLEMENTED
+- Active Workspace Grant selection and persistence: IMPLEMENTED
+- Bounded project-context summary: IMPLEMENTED
+- Stack, entrypoint, Git, and scan-count presentation: IMPLEMENTED
+- Explicit Engineering context IPC channel: IMPLEMENTED
+- Explicit fixed-command Engineering IPC channel: IMPLEMENTED
+- Main-process workspace-id and command-id validation: IMPLEMENTED
+- Renderer raw command/argument/path/timeout input absence: IMPLEMENTED
+- Test/build availability derived from trusted project context: IMPLEMENTED
+- Persisted exact-approval card with expiry: IMPLEMENTED
+- Chinese Engineering task and approval presentation: IMPLEMENTED
+- Sanitized bounded command-output panel: IMPLEMENTED
+- Engineering task persistence in Task Center: IMPLEMENTED
+- Phase 7C automated tests: IMPLEMENTED — Windows execution required before TESTED
+- Human Windows GUI verification: BLOCKED_EXTERNAL
 
 ## Explicitly Not Implemented In Phase 1
 
