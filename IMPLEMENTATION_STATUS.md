@@ -252,6 +252,24 @@ Legend:
 - Live interactive UIA smoke: DEFERRED_BY_USER_NONINTERACTIVE_SESSION
 - Human Windows desktop verification: DEFERRED_BY_USER — consolidated human acceptance will be performed after feature completion
 
+## Phase 7A
+
+- Engineering project context service: IMPLEMENTED
+- Reuse existing Workspace Grant as engineering project boundary: IMPLEMENTED
+- Bounded marker and stack detection: IMPLEMENTED
+- Common entrypoint detection: IMPLEMENTED
+- Declared package-script discovery: IMPLEMENTED
+- Safe Git HEAD branch and commit inspection without command execution: IMPLEMENTED
+- Dependency/cache/build/VCS directory exclusion: IMPLEMENTED
+- Symlink and junction traversal rejection: IMPLEMENTED
+- Authenticated engineering context API: IMPLEMENTED
+- Phase 7A Windows validation: TESTED — 86 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
+- Engineering Center Renderer page: NOT_IMPLEMENTED
+- Approved Git/build/test command runner: NOT_IMPLEMENTED
+- Git worktree lifecycle: NOT_IMPLEMENTED
+- Model router and independent code reviewer: NOT_IMPLEMENTED
+- Human Windows desktop verification: DEFERRED_BY_USER
+
 ## Explicitly Not Implemented In Phase 1
 
 - Production OpenAI API integration: NOT_IMPLEMENTED
