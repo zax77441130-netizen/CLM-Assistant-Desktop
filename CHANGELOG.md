@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 7C - Engineering Center
+
+- Added a dedicated responsive Engineering Center page with workspace selection and bounded project summaries.
+- Added explicit project-context and fixed-command IPC methods across Renderer, Preload, Main, and Runtime.
+- Added Main-process validation that accepts only workspace identifiers and `test` or `build` command ids.
+- Added exact approval, localized risk details, execution state, and sanitized output presentation.
+- Added frontend security-contract coverage ensuring there is no raw command input or generic execution bridge.
+
 ## Phase 7B - Approved Engineering Command Runner
 
 - Added fixed `test` and `build` command ids for repository-owned Windows validation scripts.
