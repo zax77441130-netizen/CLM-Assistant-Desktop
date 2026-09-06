@@ -70,6 +70,29 @@ def test_detects_stack_commands_entrypoints_and_git_without_source_content(tmp_p
     assert "not returned" not in result.model_dump_json()
 
 
+def test_prefers_repository_windows_validation_scripts(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"test": "vitest", "build": "vite build"}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "services" / "runtime" / "app").mkdir(parents=True)
+    (tmp_path / "services" / "runtime" / "app" / "main.py").write_text(
+        "print('ok')\n", encoding="utf-8"
+    )
+    (tmp_path / "services" / "runtime" / "pyproject.toml").write_text(
+        "[project]\nname='demo'\n", encoding="utf-8"
+    )
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "test_windows.ps1").write_text("exit 0\n", encoding="utf-8")
+    (tmp_path / "scripts" / "build_desktop.ps1").write_text("exit 0\n", encoding="utf-8")
+
+    result = ProjectContextService().inspect(grant(tmp_path))
+
+    assert result.entrypoints == ["services/runtime/app/main.py"]
+    assert result.testCommands == [r".\scripts\test_windows.ps1"]
+    assert result.buildCommands == [r".\scripts\build_desktop.ps1"]
+
+
 def test_scan_skips_dependency_directories(tmp_path: Path) -> None:
     (tmp_path / "node_modules").mkdir()
     for index in range(20):

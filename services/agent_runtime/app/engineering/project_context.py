@@ -31,6 +31,7 @@ MAX_SCAN_DEPTH = 8
 MAX_MARKER_DEPTH = 4
 MAX_SCAN_FILES = 10_000
 MAX_MARKERS = 200
+MAX_ENTRYPOINTS = 50
 MAX_PACKAGE_JSON_BYTES = 1024 * 1024
 MAX_GIT_TEXT_BYTES = 1024 * 1024
 SAFE_GIT_REF = re.compile(r"^refs/[A-Za-z0-9._/-]+$")
@@ -156,17 +157,37 @@ class ProjectContextService:
         return sorted(found)
 
     def _entrypoints(self, root: Path) -> list[str]:
-        candidates = (
-            "src/main.ts",
-            "src/main.tsx",
-            "src/index.ts",
-            "src/index.tsx",
-            "app/main.py",
+        names = {
+            "Program.cs",
+            "index.ts",
+            "index.tsx",
+            "main.dart",
+            "main.go",
             "main.py",
-            "lib/main.dart",
-            "cmd/main.go",
-        )
-        return [name for name in candidates if self._safe_file(root / name)]
+            "main.ts",
+            "main.tsx",
+        }
+        found: list[str] = []
+        for current, dir_names, file_names in os.walk(root, topdown=True, followlinks=False):
+            current_path = Path(current)
+            try:
+                depth = len(current_path.relative_to(root).parts)
+            except ValueError:
+                break
+            dir_names[:] = [
+                name
+                for name in sorted(dir_names)
+                if name not in IGNORED_DIRECTORIES
+                and depth < MAX_MARKER_DEPTH
+                and not self._is_link_or_junction(current_path / name)
+            ]
+            for name in sorted(set(file_names) & names):
+                candidate = current_path / name
+                if self._safe_file(candidate):
+                    found.append(candidate.relative_to(root).as_posix())
+                    if len(found) >= MAX_ENTRYPOINTS:
+                        return found
+        return found
 
     def _commands(self, root: Path, markers: list[str]) -> tuple[list[str], list[str]]:
         tests: list[str] = []
@@ -178,20 +199,30 @@ class ProjectContextService:
             if "package.json" in marker_set
             else set()
         )
+        windows_test_script = self._safe_file(root / "scripts" / "test_windows.ps1")
+        windows_build_script = self._safe_file(root / "scripts" / "build_desktop.ps1")
         package_runner = "npm"
         if "pnpm-lock.yaml" in marker_set:
             package_runner = "pnpm"
         elif "yarn.lock" in marker_set:
             package_runner = "yarn"
-        if "test" in scripts:
+        if windows_test_script:
+            tests.append(r".\scripts\test_windows.ps1")
+        elif "test" in scripts:
             tests.append(f"{package_runner} test")
-        if "typecheck" in scripts:
+        if not windows_test_script and "typecheck" in scripts:
             tests.append(f"{package_runner} run typecheck")
-        if "lint" in scripts:
+        if not windows_test_script and "lint" in scripts:
             tests.append(f"{package_runner} run lint")
-        if "build" in scripts:
+        if windows_build_script:
+            builds.append(r".\scripts\build_desktop.ps1")
+        elif "build" in scripts:
             builds.append(f"{package_runner} run build")
-        if marker_names & {"pyproject.toml", "requirements.txt", "Pipfile"}:
+        if not windows_test_script and marker_names & {
+            "pyproject.toml",
+            "requirements.txt",
+            "Pipfile",
+        }:
             tests.append("python -m pytest")
         if "pubspec.yaml" in marker_names:
             tests.extend(["flutter analyze", "flutter test"])
