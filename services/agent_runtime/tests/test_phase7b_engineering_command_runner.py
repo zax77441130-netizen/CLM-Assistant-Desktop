@@ -173,6 +173,8 @@ def test_script_change_invalidates_exact_approval(
     assert approval.exact_arguments["command_id"] == "test"
     assert approval.exact_arguments["command_display"] == r".\scripts\test_windows.ps1"
     assert approval.exact_arguments["command_fingerprint"]
+    assert approval.exact_arguments["command_script_sha256"]
+    assert r".\scripts\test_windows.ps1" in approval.risk_reason
 
     (tmp_path / "scripts" / "test_windows.ps1").write_text(
         "Write-Output 'changed after approval'\n",
