@@ -323,7 +323,7 @@ Legend:
 - Manifest/source SHA-256 approval binding and change invalidation: IMPLEMENTED
 - Raw command, argument, executable, path, environment, and timeout Renderer inputs: BLOCKED
 - Linux syntax/compile check: PASSED
-- Windows automated validation: PENDING
+- Windows automated validation: TESTED — 99 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
 - Human Windows GUI verification: PENDING
 
 ## Explicitly Not Implemented In Phase 1
