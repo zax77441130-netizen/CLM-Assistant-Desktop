@@ -40,3 +40,13 @@ a pinned system PowerShell path, and timeout process-tree termination.
 Changing the selected script after approval invalidates the approval. Unknown commands,
 missing scripts, unavailable system PowerShell, and out-of-range timeouts fail closed.
 
+## Phase 7C Engineering Center Rules
+
+Engineering Center must use explicit `engineering:getProjectContext` and
+`engineering:runCommand` IPC channels. Main validates workspace ids and accepts only the
+`test` and `build` command ids, then constructs the fixed Runtime request itself.
+
+Renderer must not receive the desktop token or submit raw command text, command arguments,
+executable paths, working directories, timeouts, or environment values. The page must show an
+exact approval card before execution and must not claim GUI verification without a human test.
+
