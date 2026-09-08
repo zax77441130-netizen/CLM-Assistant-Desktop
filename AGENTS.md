@@ -61,3 +61,17 @@ directories, timeouts, or environment values. The exact approval fingerprint mus
 selected action, displayed command, runner kind, controlling project marker, and its SHA-256.
 Execution uses `shell=False`, a reduced environment, bounded output and timeout, secret/path
 redaction, ANSI removal, Windows output decoding, and process-tree termination on timeout.
+
+## Phase 7E Project Readiness Rules
+
+Engineering Center must use the same command catalog for display and execution. A language,
+manifest, or lock-file marker alone must never make an action runnable. Before enabling an
+action, Runtime must verify the fixed script or declared manifest action, the required package
+manager or Python interpreter, and the required local dependencies.
+
+Root and bounded nested project units may be discovered, but multiple runnable nested units must
+fail closed as ambiguous until a future opaque unit selector is implemented. The Renderer must
+not submit a working directory, marker path, executable, arguments, environment, or raw command.
+Readiness probes must be fixed, non-mutating, `shell=False`, bounded, and must not install or
+modify dependencies. Missing tools, missing dependencies, missing scripts, ambiguity, and
+unsupported runners must be presented as distinct states.

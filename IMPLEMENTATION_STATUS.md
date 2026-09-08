@@ -326,6 +326,23 @@ Legend:
 - Windows automated validation: TESTED — 99 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
 - Human Windows GUI verification: TESTED — CLM shows immediate RUNNING state and elapsed time; DOS/Python reaches exact approval and executes the detected pytest command, then returns a clean missing-pytest environment error
 
+## Phase 7E
+
+- Shared project command catalog for context and execution: IMPLEMENTED
+- Root and bounded nested Node/Python project-unit discovery: IMPLEMENTED
+- Manifest `packageManager` and nearest-lock selection: IMPLEMENTED
+- npm/pnpm/yarn executable readiness: IMPLEMENTED
+- Node dependency readiness: IMPLEMENTED
+- Project-local Python interpreter selection: IMPLEMENTED
+- Fixed isolated pytest availability probe: IMPLEMENTED
+- Distinct missing-tool, missing-dependency, no-script, ambiguous, and unsupported states: IMPLEMENTED
+- Runtime-derived project-unit working directory in approval fingerprint: IMPLEMENTED
+- Renderer actionable readiness messages: IMPLEMENTED
+- Global `CI=1` injection removal: IMPLEMENTED
+- Phase 7E focused Linux contract tests: TESTED — 6 passed; Ruff and targeted mypy passed
+- Phase 7E Windows automated validation: BLOCKED_EXTERNAL — requires Windows PowerShell validation
+- Phase 7E multi-project GUI verification: BLOCKED_EXTERNAL — requires the four reported project fixtures
+
 ## Explicitly Not Implemented In Phase 1
 
 - Production OpenAI API integration: NOT_IMPLEMENTED

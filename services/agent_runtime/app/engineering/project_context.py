@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 from pathlib import Path
@@ -8,6 +7,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.core.path_policy import PathPolicyError, WorkspacePathPolicy
+from app.engineering.command_catalog import EngineeringCommandAvailability
+from app.engineering.command_runner import EngineeringCommandRunner
 from app.models import WorkspaceGrant
 
 
@@ -32,7 +33,6 @@ MAX_MARKER_DEPTH = 4
 MAX_SCAN_FILES = 10_000
 MAX_MARKERS = 200
 MAX_ENTRYPOINTS = 50
-MAX_PACKAGE_JSON_BYTES = 1024 * 1024
 MAX_GIT_TEXT_BYTES = 1024 * 1024
 SAFE_GIT_REF = re.compile(r"^refs/[A-Za-z0-9._/-]+$")
 SAFE_COMMIT = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -60,6 +60,8 @@ class EngineeringProjectContextResponse(BaseModel):
     entrypoints: list[str] = Field(default_factory=list)
     testCommands: list[str] = Field(default_factory=list)
     buildCommands: list[str] = Field(default_factory=list)
+    testReadiness: EngineeringCommandAvailability
+    buildReadiness: EngineeringCommandAvailability
     git: GitContext = Field(default_factory=GitContext)
     scan: ScanContext = Field(default_factory=ScanContext)
 
@@ -71,7 +73,10 @@ class ProjectContextError(ValueError):
 
 
 class ProjectContextService:
-    """Inspect a granted workspace without executing commands or reading user source."""
+    """Inspect a grant and perform bounded, non-mutating runner readiness probes."""
+
+    def __init__(self, command_runner: EngineeringCommandRunner | None = None) -> None:
+        self._command_runner = command_runner or EngineeringCommandRunner()
 
     def inspect(self, grant: WorkspaceGrant) -> EngineeringProjectContextResponse:
         if not grant.enabled:
@@ -84,7 +89,18 @@ class ProjectContextService:
         markers = self._markers(root)
         stacks = self._stacks(markers)
         entrypoints = self._entrypoints(root)
-        test_commands, build_commands = self._commands(root, markers)
+        test_readiness = self._command_runner.availability(str(root), "test")
+        build_readiness = self._command_runner.availability(str(root), "build")
+        test_commands = (
+            [test_readiness.displayCommand]
+            if test_readiness.status == "READY" and test_readiness.displayCommand
+            else []
+        )
+        build_commands = (
+            [build_readiness.displayCommand]
+            if build_readiness.status == "READY" and build_readiness.displayCommand
+            else []
+        )
         return EngineeringProjectContextResponse(
             workspaceId=grant.id,
             projectName=grant.display_name or root.name,
@@ -93,6 +109,8 @@ class ProjectContextService:
             entrypoints=entrypoints,
             testCommands=test_commands,
             buildCommands=build_commands,
+            testReadiness=test_readiness,
+            buildReadiness=build_readiness,
             git=self._git_context(root),
             scan=self._scan(root),
         )
@@ -188,62 +206,6 @@ class ProjectContextService:
                     if len(found) >= MAX_ENTRYPOINTS:
                         return found
         return found
-
-    def _commands(self, root: Path, markers: list[str]) -> tuple[list[str], list[str]]:
-        tests: list[str] = []
-        builds: list[str] = []
-        marker_set = set(markers)
-        marker_names = {Path(marker).name for marker in markers}
-        scripts = (
-            self._package_scripts(root / "package.json")
-            if "package.json" in marker_set
-            else set()
-        )
-        windows_test_script = self._safe_file(root / "scripts" / "test_windows.ps1")
-        windows_build_script = self._safe_file(root / "scripts" / "build_desktop.ps1")
-        package_runner = "npm"
-        if "pnpm-lock.yaml" in marker_set:
-            package_runner = "pnpm"
-        elif "yarn.lock" in marker_set:
-            package_runner = "yarn"
-        if windows_test_script:
-            tests.append(r".\scripts\test_windows.ps1")
-        elif "test" in scripts:
-            tests.append(f"{package_runner} test")
-        if not windows_test_script and "typecheck" in scripts:
-            tests.append(f"{package_runner} run typecheck")
-        if not windows_test_script and "lint" in scripts:
-            tests.append(f"{package_runner} run lint")
-        if windows_build_script:
-            builds.append(r".\scripts\build_desktop.ps1")
-        elif "build" in scripts:
-            builds.append(f"{package_runner} run build")
-        if not windows_test_script and marker_names & {
-            "pyproject.toml",
-            "requirements.txt",
-            "Pipfile",
-        }:
-            tests.append("python -m pytest")
-        if "pubspec.yaml" in marker_names:
-            tests.extend(["flutter analyze", "flutter test"])
-            builds.append("flutter build windows")
-        if "Cargo.toml" in marker_names:
-            tests.append("cargo test")
-            builds.append("cargo build")
-        if "go.mod" in marker_names:
-            tests.append("go test ./...")
-            builds.append("go build ./...")
-        return tests, builds
-
-    def _package_scripts(self, path: Path) -> set[str]:
-        if not self._safe_file(path) or path.stat().st_size > MAX_PACKAGE_JSON_BYTES:
-            return set()
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return set()
-        scripts = payload.get("scripts", {}) if isinstance(payload, dict) else {}
-        return {str(name) for name in scripts} if isinstance(scripts, dict) else set()
 
     def _git_context(self, root: Path) -> GitContext:
         git_dir = root / ".git"

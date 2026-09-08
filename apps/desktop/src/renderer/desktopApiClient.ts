@@ -16,6 +16,8 @@ export interface EngineeringProjectContext {
   entrypoints: string[];
   testCommands: string[];
   buildCommands: string[];
+  testReadiness: EngineeringCommandReadiness;
+  buildReadiness: EngineeringCommandReadiness;
   git: {
     detected: boolean;
     branch?: string | null;
@@ -28,6 +30,16 @@ export interface EngineeringProjectContext {
     truncated: boolean;
     maxDepth: number;
   };
+}
+
+export interface EngineeringCommandReadiness {
+  commandId: "test" | "build";
+  status: "READY" | "MISSING_TOOL" | "MISSING_DEPENDENCY" | "NO_SCRIPT" | "AMBIGUOUS" | "UNSUPPORTED";
+  reasonCode: string;
+  reason: string;
+  displayCommand?: string | null;
+  projectRelativePath?: string | null;
+  candidateCount: number;
 }
 
 export interface TaskResult {

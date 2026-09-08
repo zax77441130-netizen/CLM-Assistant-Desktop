@@ -5,7 +5,6 @@ import importlib
 import json
 import os
 import re
-import shutil
 import subprocess
 import threading
 from collections.abc import Callable
@@ -16,6 +15,10 @@ from pydantic import BaseModel
 
 from app.core.path_policy import PathPolicyError, WorkspacePathPolicy
 from app.core.tool_sdk import ToolEvidence, ToolResult, now_utc
+from app.engineering.command_catalog import (
+    EngineeringCommandAvailability,
+    ProjectCommandCatalog,
+)
 
 
 MAX_OUTPUT_BYTES = 128 * 1024
@@ -27,25 +30,6 @@ SECRET_ASSIGNMENT = re.compile(
 ANSI_ESCAPE = re.compile(
     r"(?:\x1B\[[0-?]*[ -/]*[@-~]|\x1B\][^\x07]*(?:\x07|\x1B\\))"
 )
-PYTHON_MARKERS = {"pyproject.toml", "requirements.txt", "Pipfile"}
-MANIFEST_SCAN_IGNORES = {
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".runtime",
-    ".venv",
-    ".venv-win",
-    "__pycache__",
-    "build",
-    "dist",
-    "node_modules",
-    "release",
-    "venv",
-}
-MAX_MANIFEST_DEPTH = 4
-
-
 class EngineeringCommandError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -57,6 +41,7 @@ class PreparedEngineeringCommand(BaseModel):
     displayCommand: str
     runnerKind: str
     sourceRelativePath: str
+    workingRelativePath: str
     scriptSha256: str
     fingerprint: str
 
@@ -64,18 +49,26 @@ class PreparedEngineeringCommand(BaseModel):
 class EngineeringCommandRunner:
     """Resolve a fixed test/build action from trusted project markers and run it."""
 
-    COMMANDS = {
-        "test": ("scripts/test_windows.ps1", r".\scripts\test_windows.ps1"),
-        "build": ("scripts/build_desktop.ps1", r".\scripts\build_desktop.ps1"),
-    }
-
     def __init__(
         self,
         process_factory: Callable[..., Any] | None = None,
         powershell_executable: str | None = None,
+        command_catalog: ProjectCommandCatalog | None = None,
     ) -> None:
         self._process_factory = process_factory or subprocess.Popen
         self._powershell_override = powershell_executable
+        self._catalog = command_catalog or ProjectCommandCatalog()
+
+    def availability(
+        self, workspace_root: str, command_id: str
+    ) -> EngineeringCommandAvailability:
+        try:
+            policy = WorkspacePathPolicy(workspace_root)
+            root = policy.resolve_directory(".").absolute_path
+        except (OSError, RuntimeError, PathPolicyError) as exc:
+            raise EngineeringCommandError("ENGINEERING_WORKSPACE_UNAVAILABLE") from exc
+        availability, _candidate = self._catalog.inspect(root, command_id)
+        return availability
 
     def prepare(
         self,
@@ -90,18 +83,17 @@ class EngineeringCommandRunner:
         except (OSError, RuntimeError, PathPolicyError) as exc:
             raise EngineeringCommandError("ENGINEERING_WORKSPACE_UNAVAILABLE") from exc
 
-        relative_path, display_command = self.COMMANDS[command_id]
-        source = root / relative_path
-        runner_kind = "powershell"
-        if not self._is_regular_file(source) or source.suffix.lower() != ".ps1":
-            detected = self._detect_manifest_command(root, command_id)
-            if detected is None:
-                raise EngineeringCommandError("ENGINEERING_COMMAND_UNAVAILABLE")
-            runner_kind, relative_path, display_command = detected
-            try:
-                source = policy.resolve_existing(relative_path).absolute_path
-            except (OSError, RuntimeError, PathPolicyError) as exc:
-                raise EngineeringCommandError("ENGINEERING_COMMAND_UNAVAILABLE") from exc
+        availability, candidate = self._catalog.inspect(root, command_id)
+        if candidate is None:
+            raise EngineeringCommandError(availability.reasonCode)
+        relative_path = candidate.source_relative_path
+        display_command = candidate.display_command
+        runner_kind = candidate.runner_kind
+        try:
+            source = policy.resolve_existing(relative_path).absolute_path
+            policy.resolve_directory(candidate.working_relative_path)
+        except (OSError, RuntimeError, PathPolicyError) as exc:
+            raise EngineeringCommandError("ENGINEERING_COMMAND_UNAVAILABLE") from exc
         if not self._is_regular_file(source):
             raise EngineeringCommandError("ENGINEERING_COMMAND_SOURCE_INVALID")
         try:
@@ -113,6 +105,7 @@ class EngineeringCommandRunner:
             "display_command": display_command,
             "runner_kind": runner_kind,
             "source_relative_path": relative_path,
+            "working_relative_path": candidate.working_relative_path,
             "source_sha256": script_sha256,
         }
         fingerprint = hashlib.sha256(
@@ -127,6 +120,7 @@ class EngineeringCommandRunner:
             displayCommand=display_command,
             runnerKind=runner_kind,
             sourceRelativePath=relative_path,
+            workingRelativePath=candidate.working_relative_path,
             scriptSha256=script_sha256,
             fingerprint=fingerprint,
         )
@@ -147,6 +141,9 @@ class EngineeringCommandRunner:
             raise EngineeringCommandError("ENGINEERING_APPROVAL_INVALIDATED")
         policy = WorkspacePathPolicy(workspace_root)
         root = policy.resolve_directory(".").absolute_path
+        working_directory = policy.resolve_directory(
+            prepared.workingRelativePath
+        ).absolute_path
         argv = self._argv(prepared, policy)
         process: Any | None = None
         output_parts: list[bytes] = []
@@ -174,7 +171,7 @@ class EngineeringCommandRunner:
         try:
             process = self._process_factory(
                 argv,
-                cwd=str(root),
+                cwd=str(working_directory),
                 env=self._safe_environment(),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -262,6 +259,7 @@ class EngineeringCommandRunner:
             observation={
                 "commandId": command.commandId,
                 "displayCommand": command.displayCommand,
+                "projectRelativePath": command.workingRelativePath,
                 "exitCode": exit_code,
                 "output": output,
                 "outputTruncated": output_truncated,
@@ -297,7 +295,6 @@ class EngineeringCommandRunner:
         }
         environment.update(
             {
-                "CI": "1",
                 "FORCE_COLOR": "0",
                 "NO_COLOR": "1",
                 "PYTHONIOENCODING": "utf-8",
@@ -319,63 +316,6 @@ class EngineeringCommandRunner:
             text,
         )
 
-    def _detect_manifest_command(
-        self, root: Path, command_id: str
-    ) -> tuple[str, str, str] | None:
-        package_json = root / "package.json"
-        scripts = self._package_scripts(package_json)
-        if command_id in scripts:
-            package_manager = self._package_manager(root)
-            if package_manager == "npm":
-                display = "npm test" if command_id == "test" else "npm run build"
-            else:
-                display = f"{package_manager} {command_id}"
-            return package_manager, "package.json", display
-        if command_id == "test":
-            marker = self._find_python_marker(root)
-            if marker is not None:
-                return "python", marker, "python -m pytest"
-        return None
-
-    def _find_python_marker(self, root: Path) -> str | None:
-        for current, dir_names, file_names in os.walk(
-            root, topdown=True, followlinks=False
-        ):
-            current_path = Path(current)
-            try:
-                depth = len(current_path.relative_to(root).parts)
-            except ValueError:
-                return None
-            dir_names[:] = [
-                name
-                for name in sorted(dir_names)
-                if name not in MANIFEST_SCAN_IGNORES
-                and depth < MAX_MANIFEST_DEPTH
-                and not self._is_directory_link(current_path / name)
-            ]
-            for name in sorted(set(file_names) & PYTHON_MARKERS):
-                candidate = current_path / name
-                if self._is_regular_file(candidate):
-                    return candidate.relative_to(root).as_posix()
-        return None
-
-    def _package_scripts(self, path: Path) -> set[str]:
-        if not self._is_regular_file(path) or path.stat().st_size > 1024 * 1024:
-            return set()
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return set()
-        scripts = payload.get("scripts") if isinstance(payload, dict) else None
-        return {str(name) for name in scripts} if isinstance(scripts, dict) else set()
-
-    def _package_manager(self, root: Path) -> str:
-        if self._is_regular_file(root / "pnpm-lock.yaml"):
-            return "pnpm"
-        if self._is_regular_file(root / "yarn.lock"):
-            return "yarn"
-        return "npm"
-
     def _argv(
         self, command: PreparedEngineeringCommand, policy: WorkspacePathPolicy
     ) -> list[str]:
@@ -392,36 +332,23 @@ class EngineeringCommandRunner:
                 str(script),
             ]
         if command.runnerKind in {"npm", "pnpm", "yarn"}:
-            executable = self._resolve_executable(f"{command.runnerKind}.cmd")
+            executable = self._catalog.resolve_executable(command.runnerKind)
+            if executable is None:
+                raise EngineeringCommandError("ENGINEERING_PACKAGE_MANAGER_UNAVAILABLE")
             if command.runnerKind == "npm" and command.commandId == "build":
                 return [executable, "run", "build"]
-            return [executable, command.commandId]
+            if command.runnerKind == "npm" and command.commandId == "test":
+                return [executable, "test"]
+            return [executable, "run", command.commandId]
         if command.runnerKind == "python" and command.commandId == "test":
-            return [self._python_executable(policy), "-m", "pytest"]
+            root = policy.resolve_directory(".").absolute_path
+            executable = self._catalog.python_executable(
+                root, command.workingRelativePath
+            )
+            if executable is None:
+                raise EngineeringCommandError("ENGINEERING_PYTHON_UNAVAILABLE")
+            return [executable, "-m", "pytest"]
         raise EngineeringCommandError("ENGINEERING_COMMAND_NOT_ALLOWED")
-
-    def _python_executable(self, policy: WorkspacePathPolicy) -> str:
-        for relative_path in (
-            ".venv-win/Scripts/python.exe",
-            ".venv/Scripts/python.exe",
-            "venv/Scripts/python.exe",
-        ):
-            try:
-                candidate = policy.resolve_existing(relative_path).absolute_path
-            except (OSError, RuntimeError, PathPolicyError):
-                continue
-            if self._is_regular_file(candidate) and candidate.name.lower() == "python.exe":
-                return str(candidate)
-        return self._resolve_executable("python.exe")
-
-    def _resolve_executable(self, name: str) -> str:
-        executable = shutil.which(name, path=os.environ.get("PATH"))
-        if not executable:
-            raise EngineeringCommandError("ENGINEERING_EXECUTABLE_UNAVAILABLE")
-        resolved = Path(executable).resolve(strict=True)
-        if not resolved.is_file() or resolved.name.lower() != name.lower():
-            raise EngineeringCommandError("ENGINEERING_EXECUTABLE_UNAVAILABLE")
-        return str(resolved)
 
     def _is_regular_file(self, path: Path) -> bool:
         try:
@@ -433,13 +360,6 @@ class EngineeringCommandRunner:
             )
         except OSError:
             return False
-
-    def _is_directory_link(self, path: Path) -> bool:
-        try:
-            is_junction = getattr(path, "is_junction", None)
-            return path.is_symlink() or bool(is_junction and is_junction())
-        except OSError:
-            return True
 
     def _powershell_executable(self) -> str:
         if self._powershell_override is not None:

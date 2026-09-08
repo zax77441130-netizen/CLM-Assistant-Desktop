@@ -15,6 +15,7 @@ from app.engineering.command_runner import (
     EngineeringCommandRunner,
     MAX_OUTPUT_BYTES,
 )
+from app.engineering.command_catalog import ProjectCommandCatalog
 from app.models import Approval, TaskState, WorkspaceGrant
 from app.schemas import StructuredTaskRequest
 from app.services.structured_task_service import StructuredTaskService
@@ -102,7 +103,9 @@ def test_prepare_detects_python_pytest_and_fails_closed_without_markers(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
-    runner = EngineeringCommandRunner()
+    runner = EngineeringCommandRunner(
+        command_catalog=ProjectCommandCatalog(python_probe=lambda executable: True)
+    )
 
     prepared = runner.prepare(str(tmp_path), "test")
 
@@ -119,10 +122,13 @@ def test_prepare_detects_nested_python_marker_within_bounded_scan(
     nested.mkdir(parents=True)
     (nested / "requirements.txt").write_text("pytest==8.3.2\n", encoding="utf-8")
 
-    prepared = EngineeringCommandRunner().prepare(str(tmp_path), "test")
+    prepared = EngineeringCommandRunner(
+        command_catalog=ProjectCommandCatalog(python_probe=lambda executable: True)
+    ).prepare(str(tmp_path), "test")
 
     assert prepared.runnerKind == "python"
     assert prepared.sourceRelativePath == "backend/service/requirements.txt"
+    assert prepared.workingRelativePath == "backend/service"
 
 
 def test_prepare_ignores_python_marker_beyond_bounded_scan(tmp_path: Path) -> None:
@@ -163,6 +169,7 @@ def test_run_uses_argument_array_no_shell_and_redacts_output(tmp_path: Path) -> 
     assert calls[0][1]["shell"] is False
     assert calls[0][1]["cwd"] == str(tmp_path.resolve())
     assert calls[0][1]["stdin"] is subprocess.DEVNULL
+    assert "CI" not in calls[0][1]["env"]
 
 
 def test_node_manifest_run_uses_fixed_argv_without_shell(tmp_path: Path) -> None:
@@ -175,8 +182,10 @@ def test_node_manifest_run_uses_fixed_argv_without_shell(tmp_path: Path) -> None
         calls.append((argv, kwargs))
         return FakeProcess(b"passed")
 
-    runner = EngineeringCommandRunner(process_factory=factory)
-    runner._resolve_executable = lambda name: "C:\\Tools\\" + name  # type: ignore[method-assign]
+    catalog = ProjectCommandCatalog(
+        executable_resolver=lambda name: "C:\\Tools\\" + name + ".cmd"
+    )
+    runner = EngineeringCommandRunner(process_factory=factory, command_catalog=catalog)
     prepared = runner.prepare(str(tmp_path), "test")
 
     result = runner.run(str(tmp_path), "test", prepared.fingerprint)

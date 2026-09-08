@@ -1,5 +1,13 @@
 # Changelog
 
+## Phase 7E - Project Readiness
+
+- Unified Engineering Center display and execution behind one command catalog.
+- Added bounded nested Node/Python project-unit discovery and root-script precedence.
+- Added package-manager, Node dependency, Python interpreter, and pytest readiness checks.
+- Added actionable readiness states and prevented unready actions from reaching approval.
+- Removed the global `CI=1` child-process setting that could trigger publishing behavior.
+
 ## Phase 7C - Engineering Center
 
 - Added a dedicated responsive Engineering Center page with workspace selection and bounded project summaries.

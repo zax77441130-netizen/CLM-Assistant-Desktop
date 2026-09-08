@@ -237,6 +237,26 @@ Engineering Center switches to `RUNNING` immediately after approval, hides the s
 card, shows an elapsed timer, prevents duplicate clicks, and allows 135 seconds for the bounded
 Runtime response. Final execution remains persisted in Task Center.
 
+## Phase 7E Shared Project Command Readiness
+
+Phase 7E replaces the duplicated UI and runner heuristics with one `ProjectCommandCatalog`.
+Repository Windows scripts remain authoritative. Otherwise the catalog scans bounded root and
+nested project units for actual `package.json` test/build scripts and Python project markers.
+Root manifest actions take precedence; multiple runnable nested units fail closed as ambiguous.
+
+Node readiness honors the manifest `packageManager` field or nearest lock file, verifies that the
+corresponding npm/pnpm/yarn executable is available, and verifies local dependency state before
+enabling execution. Python readiness prefers a unit-local or workspace virtual environment,
+falls back to system Python only when available, and uses a fixed isolated five-second probe to
+verify that pytest exists. Probes never install packages or execute project source.
+
+The context response exposes separate `READY`, `MISSING_TOOL`, `MISSING_DEPENDENCY`, `NO_SCRIPT`,
+`AMBIGUOUS`, and `UNSUPPORTED` states with a user-facing reason. Only `READY` actions reach exact
+approval. The selected unit path is derived exclusively by Runtime, included in the approval
+fingerprint, and used as the child process working directory. Renderer still sends only workspace
+id and fixed action id. The reduced execution environment no longer injects `CI=1`, preventing
+unintended package-builder publishing behavior.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

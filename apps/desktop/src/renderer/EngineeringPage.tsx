@@ -160,8 +160,8 @@ export function EngineeringPage({
     }
   };
 
-  const supportsTest = (context?.testCommands.length ?? 0) > 0;
-  const supportsBuild = (context?.buildCommands.length ?? 0) > 0;
+  const supportsTest = context?.testReadiness.status === "READY";
+  const supportsBuild = context?.buildReadiness.status === "READY";
   const output = typeof task?.observation?.output === "string" ? task.observation.output : null;
   const gitLabel = context?.git.detected
     ? (context.git.branch ?? "detached") + (context.git.commit ? " · " + context.git.commit.slice(0, 8) : "")
@@ -214,8 +214,8 @@ export function EngineeringPage({
         <p className="muted">只執行由專案標記安全辨識的測試或建置命令。每次執行都必須再次核准。</p>
         {context && (supportsTest || supportsBuild) && (
           <div className="engineering-detected-commands">
-            {supportsTest && <span>測試：{context.testCommands[0]}</span>}
-            {supportsBuild && <span>建置：{context.buildCommands[0]}</span>}
+            {supportsTest && <span>測試：{commandLabel(context.testReadiness)}</span>}
+            {supportsBuild && <span>建置：{commandLabel(context.buildReadiness)}</span>}
           </div>
         )}
         <div className="engineering-command-grid">
@@ -228,9 +228,8 @@ export function EngineeringPage({
             {loading === "build" ? "準備中" : "執行專案建置"}
           </button>
         </div>
-        {context && !supportsTest && !supportsBuild && (
-          <div className="notice">此工作區沒有可安全辨識的測試或建置命令，因此不會開放執行。</div>
-        )}
+        {context && !supportsTest && <div className="notice">測試未就緒：{context.testReadiness.reason}</div>}
+        {context && !supportsBuild && <div className="notice">建置未就緒：{context.buildReadiness.reason}</div>}
       </section>
 
       <section className="panel engineering-result">
@@ -270,6 +269,13 @@ export function EngineeringPage({
   );
 }
 
+function commandLabel(readiness: EngineeringProjectContext["testReadiness"]): string {
+  const unit = readiness.projectRelativePath && readiness.projectRelativePath !== "."
+    ? `（${readiness.projectRelativePath}）`
+    : "";
+  return `${readiness.displayCommand ?? "未辨識"}${unit}`;
+}
+
 function InfoCard({ title, value }: { title: string; value: string }): React.ReactElement {
   return (
     <div className="engineering-info-card">
@@ -293,7 +299,7 @@ function engineeringTaskSummary(task: TaskResult): string {
     return "工程腳本執行失敗，請查看下方輸出。";
   }
   if (task.state === "BLOCKED") {
-    return "工程任務已拒絕、失效或被安全政策阻擋。";
+    return task.summary ?? "工程任務已拒絕、失效或被安全政策阻擋。";
   }
   return task.summary ?? "工程任務處理中。";
 }

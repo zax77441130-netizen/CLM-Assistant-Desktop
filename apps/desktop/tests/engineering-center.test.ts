@@ -13,6 +13,8 @@ describe("Engineering Center security contract", () => {
     expect(engineeringPage).toContain("每次執行都必須再次核准");
     expect(engineeringPage).toContain('state: "RUNNING"');
     expect(engineeringPage).toContain("執行中 ·");
+    expect(engineeringPage).toContain("測試未就緒");
+    expect(engineeringPage).toContain("buildReadiness.status");
     expect(engineeringPage).not.toMatch(/<textarea|<input/i);
   });
 
