@@ -8,6 +8,40 @@ export interface Workspace {
   enabled: boolean;
 }
 
+export interface EngineeringProjectContext {
+  workspaceId: string;
+  projectName: string;
+  stacks: string[];
+  markers: string[];
+  entrypoints: string[];
+  testCommands: string[];
+  buildCommands: string[];
+  testReadiness: EngineeringCommandReadiness;
+  buildReadiness: EngineeringCommandReadiness;
+  git: {
+    detected: boolean;
+    branch?: string | null;
+    commit?: string | null;
+    dirty?: boolean | null;
+  };
+  scan: {
+    fileCount: number;
+    directoryCount: number;
+    truncated: boolean;
+    maxDepth: number;
+  };
+}
+
+export interface EngineeringCommandReadiness {
+  commandId: "test" | "build";
+  status: "READY" | "MISSING_TOOL" | "MISSING_DEPENDENCY" | "NO_SCRIPT" | "AMBIGUOUS" | "UNSUPPORTED";
+  reasonCode: string;
+  reason: string;
+  displayCommand?: string | null;
+  projectRelativePath?: string | null;
+  candidateCount: number;
+}
+
 export interface TaskResult {
   id: string;
   title?: string;
@@ -92,6 +126,8 @@ export type DesktopBridge = {
   shutdownRuntime: () => Promise<RuntimeStatus | null>;
   selectWorkspace: () => Promise<Workspace | { cancelled: true } | null>;
   getWorkspaces: () => Promise<Workspace[]>;
+  getEngineeringProjectContext: (workspaceId: string) => Promise<EngineeringProjectContext>;
+  runEngineeringCommand: (workspaceId: string, commandId: "test" | "build") => Promise<TaskResult>;
   createStructuredTask: (payload: unknown) => Promise<TaskResult>;
   createAssistantTask: (payload: unknown) => Promise<AssistantTaskResult>;
   cancelAssistantTask: (taskId: string) => Promise<AssistantTaskResult>;

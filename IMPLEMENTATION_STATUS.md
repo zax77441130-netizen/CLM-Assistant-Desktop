@@ -264,7 +264,7 @@ Legend:
 - Symlink and junction traversal rejection: IMPLEMENTED
 - Authenticated engineering context API: IMPLEMENTED
 - Phase 7A Windows validation: TESTED — 86 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
-- Engineering Center Renderer page: NOT_IMPLEMENTED
+- Engineering Center Renderer page: IMPLEMENTED — Phase 7C
 - Approved Git/build/test command runner: PARTIAL — Phase 7B allows only exact-approved repository Windows test/build scripts
 - Git worktree lifecycle: NOT_IMPLEMENTED
 - Model router and independent code reviewer: NOT_IMPLEMENTED
@@ -284,10 +284,64 @@ Legend:
 - 60-second timeout and process-tree termination: IMPLEMENTED
 - 128 KiB bounded output with workspace-path and secret redaction: IMPLEMENTED
 - Phase 7B Windows validation: TESTED — 92 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 15 Vitest tests, and production build passed
-- Engineering Center Renderer controls: NOT_IMPLEMENTED
+- Engineering Center Renderer controls: IMPLEMENTED — Phase 7C
 - General package-manager command catalog: NOT_IMPLEMENTED
 - Git command/worktree lifecycle: NOT_IMPLEMENTED
 - Human Windows desktop verification: DEFERRED_BY_USER
+
+## Phase 7C
+
+- Engineering Center navigation and responsive page: IMPLEMENTED
+- Active Workspace Grant selection and persistence: IMPLEMENTED
+- Bounded project-context summary: IMPLEMENTED
+- Stack, entrypoint, Git, and scan-count presentation: IMPLEMENTED
+- Explicit Engineering context IPC channel: IMPLEMENTED
+- Explicit fixed-command Engineering IPC channel: IMPLEMENTED
+- Main-process workspace-id and command-id validation: IMPLEMENTED
+- Renderer raw command/argument/path/timeout input absence: IMPLEMENTED
+- Test/build availability derived from trusted project context: IMPLEMENTED
+- Persisted exact-approval card with expiry: IMPLEMENTED
+- Chinese Engineering task and approval presentation: IMPLEMENTED
+- Sanitized bounded command-output panel: IMPLEMENTED
+- Engineering task persistence in Task Center: IMPLEMENTED
+- Phase 7C Windows automated validation: TESTED — 92 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
+- Human Windows GUI verification: PARTIAL — execution completed, but synchronous waiting looked stuck and raw ANSI/encoding artifacts were visible; addressed in Phase 7D pending retest
+
+## Phase 7D
+
+- Immediate Engineering Center `RUNNING` state and elapsed timer: IMPLEMENTED
+- Persisted final command duration: IMPLEMENTED
+- Duplicate execution prevention while an approved command is running: IMPLEMENTED
+- 120-second bounded engineering command timeout: IMPLEMENTED
+- 135-second Main-to-Runtime response deadline with recovery guidance: IMPLEMENTED
+- ANSI terminal-control removal: IMPLEMENTED
+- UTF-8 with Windows Traditional Chinese output fallback: IMPLEMENTED
+- Repository Windows scripts remain preferred: IMPLEMENTED
+- Root Node package test/build script resolution (npm/pnpm/yarn): IMPLEMENTED
+- Fixed Python `python -m pytest` resolution with project virtualenv preference: IMPLEMENTED
+- Bounded nested Python marker resolution aligned with project-context scan: IMPLEMENTED
+- Manifest/source SHA-256 approval binding and change invalidation: IMPLEMENTED
+- Raw command, argument, executable, path, environment, and timeout Renderer inputs: BLOCKED
+- Linux syntax/compile check: PASSED
+- Windows automated validation: TESTED — 99 passed, 1 skipped; Ruff/mypy, TypeScript typecheck, 18 Vitest tests, and production build passed
+- Human Windows GUI verification: TESTED — CLM shows immediate RUNNING state and elapsed time; DOS/Python reaches exact approval and executes the detected pytest command, then returns a clean missing-pytest environment error
+
+## Phase 7E
+
+- Shared project command catalog for context and execution: IMPLEMENTED
+- Root and bounded nested Node/Python project-unit discovery: IMPLEMENTED
+- Manifest `packageManager` and nearest-lock selection: IMPLEMENTED
+- npm/pnpm/yarn executable readiness: IMPLEMENTED
+- Node dependency readiness: IMPLEMENTED
+- Project-local Python interpreter selection: IMPLEMENTED
+- Fixed isolated pytest availability probe: IMPLEMENTED
+- Distinct missing-tool, missing-dependency, no-script, ambiguous, and unsupported states: IMPLEMENTED
+- Runtime-derived project-unit working directory in approval fingerprint: IMPLEMENTED
+- Renderer actionable readiness messages: IMPLEMENTED
+- Global `CI=1` injection removal: IMPLEMENTED
+- Phase 7E focused Linux contract tests: TESTED — 6 passed; Ruff and targeted mypy passed
+- Phase 7E Windows automated validation: BLOCKED_EXTERNAL — requires Windows PowerShell validation
+- Phase 7E multi-project GUI verification: BLOCKED_EXTERNAL — requires the four reported project fixtures
 
 ## Explicitly Not Implemented In Phase 1
 

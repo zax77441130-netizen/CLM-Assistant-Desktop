@@ -7,6 +7,8 @@ declare global {
       shutdownRuntime: () => Promise<RuntimeStatus | null>;
       selectWorkspace: () => Promise<unknown | null>;
       getWorkspaces: () => Promise<unknown[]>;
+      getEngineeringProjectContext: (workspaceId: string) => Promise<unknown>;
+      runEngineeringCommand: (workspaceId: string, commandId: "test" | "build") => Promise<unknown>;
       createStructuredTask: (payload: unknown) => Promise<unknown>;
       createAssistantTask: (payload: unknown) => Promise<unknown>;
       cancelAssistantTask: (taskId: string) => Promise<unknown>;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Bot, ClipboardList, FolderOpen, Play, RotateCcw, Settings, ShieldCheck, Square, Trash2, Workflow } from "lucide-react";
+import { Bot, ClipboardList, Code2, FolderOpen, Play, RotateCcw, Settings, ShieldCheck, Square, Trash2, Workflow } from "lucide-react";
 import type { RuntimeStatus } from "@clm/contracts";
 import {
   bridgeErrorMessage,
@@ -15,16 +15,26 @@ import {
   type Workspace
 } from "./desktopApiClient";
 import { stateLabel, t } from "./i18n";
+import { EngineeringPage } from "./EngineeringPage";
 import "./styles.css";
 
-type Page = "assistant" | "tasks" | "automations" | "settings";
+type Page = "assistant" | "engineering" | "tasks" | "automations" | "settings";
 
 const pages: Array<{ id: Page; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { id: "assistant", label: "助理", icon: Bot },
+  { id: "engineering", label: "工程中心", icon: Code2 },
   { id: "tasks", label: "任務", icon: ClipboardList },
   { id: "automations", label: "自動化", icon: Workflow },
   { id: "settings", label: "設定", icon: Settings }
 ];
+
+const pageDescriptions: Record<Page, string> = {
+  assistant: "用中文描述要完成的本機工作，助理會先規劃再安全執行。",
+  engineering: "檢查工程專案結構，經過核准後執行受控測試與建置。",
+  tasks: "查看每個任務的狀態、步驟、核准與觀察結果。",
+  automations: "管理未來要定時或依條件執行的安全工作。",
+  settings: "管理模型、工作區與本機執行核心設定。"
+};
 
 const examples = ["列出目前工作區的檔案", "讀取 example.txt", "找出重複檔案", "建立資料夾 測試建立"];
 const ACTIVE_WORKSPACE_KEY = "clm.activeWorkspaceId";
@@ -79,12 +89,13 @@ export function App(): React.ReactElement {
         <header className="topbar">
           <div>
             <h1>{pages.find((item) => item.id === page)?.label}</h1>
-            <p>用中文描述要完成的本機工作，助理會先規劃再安全執行。</p>
+            <p>{pageDescriptions[page]}</p>
           </div>
           <RuntimePill status={status} error={error} bridgeReady={bridgeReady} />
         </header>
         {error && <div className="notice error">{error}</div>}
         {page === "assistant" && <AssistantPage status={status} bridgeReady={bridgeReady} />}
+        {page === "engineering" && <EngineeringPage status={status} bridgeReady={bridgeReady} />}
         {page === "tasks" && <TasksPage />}
         {page === "automations" && <AutomationsPage />}
         {page === "settings" && <SettingsPage status={status} bridgeReady={bridgeReady} />}

@@ -61,8 +61,11 @@ def test_detects_stack_commands_entrypoints_and_git_without_source_content(tmp_p
     assert result.stacks == ["node", "python", "typescript"]
     assert "services/runtime/pyproject.toml" in result.markers
     assert result.entrypoints == ["src/main.ts"]
-    assert result.testCommands == ["npm test", "npm run typecheck", "python -m pytest"]
+    assert result.testCommands == ["npm test"]
+    assert result.testReadiness.status == "READY"
+    assert result.testReadiness.candidateCount == 2
     assert result.buildCommands == ["npm run build"]
+    assert result.buildReadiness.status == "READY"
     assert result.git.detected is True
     assert result.git.branch == "main"
     assert result.git.commit == commit
@@ -91,6 +94,8 @@ def test_prefers_repository_windows_validation_scripts(tmp_path: Path) -> None:
     assert result.entrypoints == ["services/runtime/app/main.py"]
     assert result.testCommands == [r".\scripts\test_windows.ps1"]
     assert result.buildCommands == [r".\scripts\build_desktop.ps1"]
+    assert result.testReadiness.status == "READY"
+    assert result.buildReadiness.status == "READY"
 
 
 def test_scan_skips_dependency_directories(tmp_path: Path) -> None:

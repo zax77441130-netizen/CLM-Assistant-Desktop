@@ -178,7 +178,13 @@ class StructuredTaskService:
             task.state = TaskState.BLOCKED
             self.audit(db, "approval.invalidated", {"approval_id": approval.id, "error": str(exc)})
             db.commit()
-            return TaskResponse(id=task.id, title=task.title, state=task.state, approval_id=approval.id, summary=str(exc))
+            return TaskResponse(
+                id=task.id,
+                title=task.title,
+                state=task.state,
+                approval_id=approval.id,
+                summary=self.safe_failure_message(exc),
+            )
         step = db.scalar(select(TaskStep).where(TaskStep.task_id == task.id).limit(1))
         if step is None:
             step = TaskStep(task_id=task.id, title="OVERWRITE_TEXT", state=TaskState.RUNNING, sort_order=1)
@@ -547,13 +553,15 @@ class StructuredTaskService:
             )
             args["command_fingerprint"] = prepared.fingerprint
             args["command_display"] = prepared.displayCommand
+            args["command_project_relative_path"] = prepared.workingRelativePath
             args["command_script_sha256"] = prepared.scriptSha256
         action.arguments_hash = argument_hash(args)
         risk_reason = f"{action.tool_name} requires exact approval."
         if args.get("task_type") == "ENGINEERING_RUN":
             risk_reason = (
-                f"Run repository script {args['command_display']} "
-                f"(SHA-256 {str(args['command_script_sha256'])[:12]}...)"
+                f"即將於工作單元 {args['command_project_relative_path']} 執行核准命令 "
+                f"{args['command_display']}，"
+                f"SHA-256 {str(args['command_script_sha256'])[:12]}...；需要精確核准。"
             )
         approval = Approval(
             task_id=task.id,
@@ -653,6 +661,16 @@ class StructuredTaskService:
 
     def safe_failure_message(self, exc: Exception) -> str:
         code = str(exc)
+        engineering_messages = {
+            "ENGINEERING_PACKAGE_MANAGER_UNAVAILABLE": "專案需要的套件管理器尚未安裝或未加入 PATH。",
+            "ENGINEERING_PYTHON_UNAVAILABLE": "找不到此工作單元可用的 Python 執行環境。",
+            "ENGINEERING_PYTEST_UNAVAILABLE": "此 Python 環境尚未安裝 pytest，因此未建立執行任務。",
+            "ENGINEERING_NODE_DEPENDENCIES_UNAVAILABLE": "尚未安裝此工作單元的 Node 依賴，因此未建立執行任務。",
+            "ENGINEERING_COMMAND_AMBIGUOUS": "偵測到多個可執行工作單元，需先選擇子專案。",
+            "ENGINEERING_COMMAND_UNAVAILABLE": "專案沒有宣告可安全辨識的測試或建置腳本。",
+        }
+        if code in engineering_messages:
+            return engineering_messages[code]
         if code in {"WORKSPACE_NOT_FOUND", "WORKSPACE_GRANT_INVALID", "WORKSPACE_REQUIRED", "WORKSPACE_NOT_DIRECTORY"}:
             return "目前工作區授權已失效，請重新選擇工作資料夾。"
         if code.startswith("POSTCONDITION_"):

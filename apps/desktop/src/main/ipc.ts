@@ -5,6 +5,25 @@ import { diagnosticsLog } from "./diagnostics.js";
 
 export { IPC_CHANNELS };
 
+function engineeringWorkspaceId(value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9-]{1,80}$/.test(value)) {
+    throw new Error("INVALID_ENGINEERING_WORKSPACE_ID");
+  }
+  return value;
+}
+
+function engineeringCommandRequest(payload: unknown): { workspaceId: string; commandId: "test" | "build" } {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("INVALID_ENGINEERING_COMMAND_REQUEST");
+  }
+  const workspaceId = engineeringWorkspaceId(Reflect.get(payload, "workspaceId"));
+  const commandId = Reflect.get(payload, "commandId");
+  if (commandId !== "test" && commandId !== "build") {
+    throw new Error("INVALID_ENGINEERING_COMMAND_ID");
+  }
+  return { workspaceId, commandId };
+}
+
 export function registerIpc(runtime: RuntimeManager): void {
   ipcMain.on(IPC_CHANNELS.preloadReady, (_event, payload) => diagnosticsLog("preload", `bridge-ready ${JSON.stringify(payload)}`));
   ipcMain.handle(IPC_CHANNELS.getRuntimeStatus, () => runtime.getStatus());
@@ -29,6 +48,22 @@ export function registerIpc(runtime: RuntimeManager): void {
     });
   });
   ipcMain.handle(IPC_CHANNELS.getWorkspaces, () => runtime.runtimeRequest("/api/workspaces"));
+  ipcMain.handle(IPC_CHANNELS.getEngineeringProjectContext, (_event, workspaceId: unknown) => {
+    const validated = engineeringWorkspaceId(workspaceId);
+    return runtime.runtimeRequest(`/api/engineering/projects/${encodeURIComponent(validated)}/context`);
+  });
+  ipcMain.handle(IPC_CHANNELS.runEngineeringCommand, (_event, payload: unknown) => {
+    const validated = engineeringCommandRequest(payload);
+    return runtime.runtimeRequest("/api/tasks/structured", {
+      method: "POST",
+      body: JSON.stringify({
+        task_type: "ENGINEERING_RUN",
+        workspace_id: validated.workspaceId,
+        command_id: validated.commandId,
+        timeout_seconds: 120
+      })
+    });
+  });
   ipcMain.handle(IPC_CHANNELS.createStructuredTask, (_event, payload: unknown) =>
     runtime.runtimeRequest("/api/tasks/structured", { method: "POST", body: JSON.stringify(payload) })
   );
@@ -59,7 +94,7 @@ export function registerIpc(runtime: RuntimeManager): void {
     runtime.runtimeRequest(`/api/approvals/${payload.approvalId}/decision`, {
       method: "POST",
       body: JSON.stringify({ approve: payload.approve })
-    })
+    }, 135_000)
   );
   ipcMain.handle(IPC_CHANNELS.undoAction, (_event, undoRecordId: string) =>
     runtime.runtimeRequest(`/api/undo/${undoRecordId}`, { method: "POST" })

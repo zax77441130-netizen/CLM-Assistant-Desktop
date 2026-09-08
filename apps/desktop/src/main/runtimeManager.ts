@@ -32,7 +32,7 @@ export class RuntimeManager {
     return this.token;
   }
 
-  async runtimeRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async runtimeRequest<T>(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<T> {
     if (!this.status || this.status.state !== "running") {
       throw new Error("Agent Runtime is not running.");
     }
@@ -40,9 +40,12 @@ export class RuntimeManager {
     const method = init.method ?? "GET";
     diagnosticsLog("runtime-api", `${requestId} ${method} ${path}`);
     let response: Response;
+    const controller = timeoutMs ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
       response = await fetch(`http://127.0.0.1:${this.status.port}${path}`, {
         ...init,
+        signal: controller?.signal ?? init.signal,
         headers: {
           "Content-Type": "application/json",
           "X-Desktop-Token": this.token,
@@ -52,7 +55,13 @@ export class RuntimeManager {
       });
     } catch (error) {
       diagnosticsLog("runtime-api", `${requestId} fetch-error ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error("本機執行核心連線失敗，請重新啟動 Runtime。");
+      throw new Error(controller?.signal.aborted
+        ? "工程命令等待逾時；背景任務可能仍在結束，請到任務中心確認。"
+        : "本機執行核心連線失敗，請重新啟動 Runtime。");
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
     if (!response.ok) {
       const body = await response.text();

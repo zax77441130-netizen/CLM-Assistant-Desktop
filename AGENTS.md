@@ -40,3 +40,38 @@ a pinned system PowerShell path, and timeout process-tree termination.
 Changing the selected script after approval invalidates the approval. Unknown commands,
 missing scripts, unavailable system PowerShell, and out-of-range timeouts fail closed.
 
+## Phase 7C Engineering Center Rules
+
+Engineering Center must use explicit `engineering:getProjectContext` and
+`engineering:runCommand` IPC channels. Main validates workspace ids and accepts only the
+`test` and `build` command ids, then constructs the fixed Runtime request itself.
+
+Renderer must not receive the desktop token or submit raw command text, command arguments,
+executable paths, working directories, timeouts, or environment values. The page must show an
+exact approval card before execution and must not claim GUI verification without a human test.
+
+## Phase 7D General Engineering Execution Rules
+
+The fixed `test` and `build` action ids may resolve to repository Windows scripts first, then to
+manifest-declared Node package scripts or the fixed Python `python -m pytest` action. Resolution
+must remain inside the active Workspace Grant and fail closed when no supported marker exists.
+
+Renderer must still never submit command text, argument arrays, executable paths, working
+directories, timeouts, or environment values. The exact approval fingerprint must cover the
+selected action, displayed command, runner kind, controlling project marker, and its SHA-256.
+Execution uses `shell=False`, a reduced environment, bounded output and timeout, secret/path
+redaction, ANSI removal, Windows output decoding, and process-tree termination on timeout.
+
+## Phase 7E Project Readiness Rules
+
+Engineering Center must use the same command catalog for display and execution. A language,
+manifest, or lock-file marker alone must never make an action runnable. Before enabling an
+action, Runtime must verify the fixed script or declared manifest action, the required package
+manager or Python interpreter, and the required local dependencies.
+
+Root and bounded nested project units may be discovered, but multiple runnable nested units must
+fail closed as ambiguous until a future opaque unit selector is implemented. The Renderer must
+not submit a working directory, marker path, executable, arguments, environment, or raw command.
+Readiness probes must be fixed, non-mutating, `shell=False`, bounded, and must not install or
+modify dependencies. Missing tools, missing dependencies, missing scripts, ambiguity, and
+unsupported runners must be presented as distinct states.

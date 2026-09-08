@@ -199,6 +199,64 @@ input, background execution, and commands outside the two trusted repository scr
 blocked. Engineering Center UI, model routing, Git worktrees, and code-review automation remain
 future phases.
 
+## Phase 7C Engineering Center
+
+Phase 7C adds a dedicated desktop Engineering Center backed by the Phase 7A read-only project
+context and Phase 7B approved runner. It displays the selected Workspace Grant, detected stacks,
+common entrypoints, bounded scan counts, and safe Git branch/commit metadata.
+
+The Renderer receives two explicit bridge methods only: project-context retrieval and execution
+of a fixed `test` or `build` command id. Main validates workspace identifiers and command ids,
+constructs the fixed `ENGINEERING_RUN` request, sets the bounded timeout, and sends it to Runtime.
+There is no command input, generic IPC, raw tool call, executable path, working-directory input,
+or caller-controlled argument array.
+
+Test and build controls are enabled only when Phase 7A detects the matching repository-owned
+Windows script. Clicking a control creates a waiting-approval task. The page retrieves the
+persisted approval, shows the localized risk reason and expiry, and requires a separate approve
+or reject action. Sanitized command output is shown in a bounded scroll area, while the complete
+task remains available in Task Center.
+
+## Phase 7D Execution Feedback and General Project Commands
+
+Phase 7D keeps the Renderer contract limited to the fixed `test` and `build` action ids, but the
+Runtime may now resolve those ids from the active project's own markers. Repository-owned Windows
+validation scripts remain the first choice. When they are absent, a root `package.json` script may
+resolve to npm, pnpm, or yarn, and a Python project marker may resolve `test` to the fixed
+`python -m pytest` action. Missing actions fail closed.
+Python markers use the same bounded four-level, no-link traversal model as project-context
+detection so the UI and execution policy cannot disagree for nested backend layouts.
+
+The approval fingerprint binds the action id, displayed command, runner kind, controlling marker
+path, and marker SHA-256. Callers still cannot provide raw command text, arguments, executables,
+working directories, environment values, or timeouts. Processes use an argument array with
+`shell=False`, a reduced environment, a 120-second timeout, bounded capture, process-tree
+termination, secret/path redaction, ANSI removal, and UTF-8/Windows Traditional Chinese decoding.
+
+Engineering Center switches to `RUNNING` immediately after approval, hides the stale approval
+card, shows an elapsed timer, prevents duplicate clicks, and allows 135 seconds for the bounded
+Runtime response. Final execution remains persisted in Task Center.
+
+## Phase 7E Shared Project Command Readiness
+
+Phase 7E replaces the duplicated UI and runner heuristics with one `ProjectCommandCatalog`.
+Repository Windows scripts remain authoritative. Otherwise the catalog scans bounded root and
+nested project units for actual `package.json` test/build scripts and Python project markers.
+Root manifest actions take precedence; multiple runnable nested units fail closed as ambiguous.
+
+Node readiness honors the manifest `packageManager` field or nearest lock file, verifies that the
+corresponding npm/pnpm/yarn executable is available, and verifies local dependency state before
+enabling execution. Python readiness prefers a unit-local or workspace virtual environment,
+falls back to system Python only when available, and uses a fixed isolated five-second probe to
+verify that pytest exists. Probes never install packages or execute project source.
+
+The context response exposes separate `READY`, `MISSING_TOOL`, `MISSING_DEPENDENCY`, `NO_SCRIPT`,
+`AMBIGUOUS`, and `UNSUPPORTED` states with a user-facing reason. Only `READY` actions reach exact
+approval. The selected unit path is derived exclusively by Runtime, included in the approval
+fingerprint, and used as the child process working directory. Renderer still sends only workspace
+id and fixed action id. The reduced execution environment no longer injects `CI=1`, preventing
+unintended package-builder publishing behavior.
+
 ## Agent Core Boundaries
 
 Phase 1 defines interfaces and data models for:

@@ -20,6 +20,8 @@ describe("IPC allowlist", () => {
       "assistant:createTask",
       "assistant:retryTask",
       "diagnostics:preloadReady",
+      "engineering:getProjectContext",
+      "engineering:runCommand",
       "host:registeredApps",
       "provider:deleteKey",
       "provider:getSettings",

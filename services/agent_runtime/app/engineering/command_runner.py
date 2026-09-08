@@ -15,16 +15,21 @@ from pydantic import BaseModel
 
 from app.core.path_policy import PathPolicyError, WorkspacePathPolicy
 from app.core.tool_sdk import ToolEvidence, ToolResult, now_utc
+from app.engineering.command_catalog import (
+    EngineeringCommandAvailability,
+    ProjectCommandCatalog,
+)
 
 
 MAX_OUTPUT_BYTES = 128 * 1024
 MIN_TIMEOUT_SECONDS = 1
-MAX_TIMEOUT_SECONDS = 60
+MAX_TIMEOUT_SECONDS = 120
 SECRET_ASSIGNMENT = re.compile(
     r"(?im)\b(token|api[_-]?key|secret|password|authorization|cookie)\b(\s*[:=]\s*)[^\r\n]*"
 )
-
-
+ANSI_ESCAPE = re.compile(
+    r"(?:\x1B\[[0-?]*[ -/]*[@-~]|\x1B\][^\x07]*(?:\x07|\x1B\\))"
+)
 class EngineeringCommandError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -34,50 +39,74 @@ class EngineeringCommandError(ValueError):
 class PreparedEngineeringCommand(BaseModel):
     commandId: str
     displayCommand: str
-    scriptRelativePath: str
+    runnerKind: str
+    sourceRelativePath: str
+    workingRelativePath: str
     scriptSha256: str
     fingerprint: str
 
 
 class EngineeringCommandRunner:
-    """Run only repository-owned Windows validation scripts after exact approval."""
-
-    COMMANDS = {
-        "test": ("scripts/test_windows.ps1", r".\scripts\test_windows.ps1"),
-        "build": ("scripts/build_desktop.ps1", r".\scripts\build_desktop.ps1"),
-    }
+    """Resolve a fixed test/build action from trusted project markers and run it."""
 
     def __init__(
         self,
         process_factory: Callable[..., Any] | None = None,
         powershell_executable: str | None = None,
+        command_catalog: ProjectCommandCatalog | None = None,
     ) -> None:
         self._process_factory = process_factory or subprocess.Popen
         self._powershell_override = powershell_executable
+        self._catalog = command_catalog or ProjectCommandCatalog()
+
+    def availability(
+        self, workspace_root: str, command_id: str
+    ) -> EngineeringCommandAvailability:
+        try:
+            policy = WorkspacePathPolicy(workspace_root)
+            root = policy.resolve_directory(".").absolute_path
+        except (OSError, RuntimeError, PathPolicyError) as exc:
+            raise EngineeringCommandError("ENGINEERING_WORKSPACE_UNAVAILABLE") from exc
+        availability, _candidate = self._catalog.inspect(root, command_id)
+        return availability
 
     def prepare(
         self,
         workspace_root: str,
         command_id: str,
     ) -> PreparedEngineeringCommand:
-        if command_id not in self.COMMANDS:
+        if command_id not in {"test", "build"}:
             raise EngineeringCommandError("ENGINEERING_COMMAND_NOT_ALLOWED")
         try:
             policy = WorkspacePathPolicy(workspace_root)
-            relative_path, display_command = self.COMMANDS[command_id]
-            script = policy.resolve_existing(relative_path).absolute_path
+            root = policy.resolve_directory(".").absolute_path
         except (OSError, RuntimeError, PathPolicyError) as exc:
-            raise EngineeringCommandError("ENGINEERING_SCRIPT_UNAVAILABLE") from exc
-        if not script.is_file() or script.suffix.lower() != ".ps1":
-            raise EngineeringCommandError("ENGINEERING_SCRIPT_INVALID")
+            raise EngineeringCommandError("ENGINEERING_WORKSPACE_UNAVAILABLE") from exc
+
+        availability, candidate = self._catalog.inspect(root, command_id)
+        if candidate is None:
+            raise EngineeringCommandError(availability.reasonCode)
+        relative_path = candidate.source_relative_path
+        display_command = candidate.display_command
+        runner_kind = candidate.runner_kind
         try:
-            script_sha256 = self._sha256(script)
+            source = policy.resolve_existing(relative_path).absolute_path
+            policy.resolve_directory(candidate.working_relative_path)
+        except (OSError, RuntimeError, PathPolicyError) as exc:
+            raise EngineeringCommandError("ENGINEERING_COMMAND_UNAVAILABLE") from exc
+        if not self._is_regular_file(source):
+            raise EngineeringCommandError("ENGINEERING_COMMAND_SOURCE_INVALID")
+        try:
+            script_sha256 = self._sha256(source)
         except OSError as exc:
-            raise EngineeringCommandError("ENGINEERING_SCRIPT_UNAVAILABLE") from exc
+            raise EngineeringCommandError("ENGINEERING_COMMAND_UNAVAILABLE") from exc
         fingerprint_payload = {
             "command_id": command_id,
-            "script_relative_path": relative_path,
-            "script_sha256": script_sha256,
+            "display_command": display_command,
+            "runner_kind": runner_kind,
+            "source_relative_path": relative_path,
+            "working_relative_path": candidate.working_relative_path,
+            "source_sha256": script_sha256,
         }
         fingerprint = hashlib.sha256(
             json.dumps(
@@ -89,7 +118,9 @@ class EngineeringCommandRunner:
         return PreparedEngineeringCommand(
             commandId=command_id,
             displayCommand=display_command,
-            scriptRelativePath=relative_path,
+            runnerKind=runner_kind,
+            sourceRelativePath=relative_path,
+            workingRelativePath=candidate.working_relative_path,
             scriptSha256=script_sha256,
             fingerprint=fingerprint,
         )
@@ -110,17 +141,10 @@ class EngineeringCommandRunner:
             raise EngineeringCommandError("ENGINEERING_APPROVAL_INVALIDATED")
         policy = WorkspacePathPolicy(workspace_root)
         root = policy.resolve_directory(".").absolute_path
-        script = policy.resolve_existing(prepared.scriptRelativePath).absolute_path
-        argv = [
-            self._powershell_executable(),
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(script),
-        ]
+        working_directory = policy.resolve_directory(
+            prepared.workingRelativePath
+        ).absolute_path
+        argv = self._argv(prepared, policy)
         process: Any | None = None
         output_parts: list[bytes] = []
         captured_bytes = 0
@@ -147,7 +171,7 @@ class EngineeringCommandRunner:
         try:
             process = self._process_factory(
                 argv,
-                cwd=str(root),
+                cwd=str(working_directory),
                 env=self._safe_environment(),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -220,9 +244,11 @@ class EngineeringCommandRunner:
         exit_code: int | None,
         error_code: str | None,
     ) -> ToolResult:
+        finished_at = now_utc()
+        duration_seconds = max(0.0, (finished_at - started_at).total_seconds())
         evidence_data = {
             "command_id": command.commandId,
-            "script_sha256": command.scriptSha256,
+            "command_source_sha256": command.scriptSha256,
             "exit_code": exit_code,
             "output_truncated": output_truncated,
         }
@@ -233,16 +259,18 @@ class EngineeringCommandRunner:
             observation={
                 "commandId": command.commandId,
                 "displayCommand": command.displayCommand,
+                "projectRelativePath": command.workingRelativePath,
                 "exitCode": exit_code,
                 "output": output,
                 "outputTruncated": output_truncated,
+                "durationSeconds": round(duration_seconds, 2),
             },
             evidence=[ToolEvidence(kind="engineering_command_exit", data=evidence_data)],
             error_code=error_code,
             retryable=False,
             side_effect=True,
             started_at=started_at,
-            finished_at=now_utc(),
+            finished_at=finished_at,
         )
 
     def _safe_environment(self) -> dict[str, str]:
@@ -262,15 +290,76 @@ class EngineeringCommandRunner:
             "USERPROFILE",
             "WINDIR",
         }
-        return {key: value for key, value in os.environ.items() if key.upper() in allowed}
+        environment = {
+            key: value for key, value in os.environ.items() if key.upper() in allowed
+        }
+        environment.update(
+            {
+                "FORCE_COLOR": "0",
+                "NO_COLOR": "1",
+                "PYTHONIOENCODING": "utf-8",
+                "PYTHONUTF8": "1",
+                "TERM": "dumb",
+            }
+        )
+        return environment
 
     def _sanitize_output(self, output: bytes, root: Path) -> str:
-        text = output.decode("utf-8", errors="replace")
+        try:
+            text = output.decode("utf-8")
+        except UnicodeDecodeError:
+            text = output.decode("cp950", errors="replace")
+        text = ANSI_ESCAPE.sub("", text)
         text = re.sub(re.escape(str(root)), "<WORKSPACE>", text, flags=re.IGNORECASE)
         return SECRET_ASSIGNMENT.sub(
             lambda match: f"{match.group(1)}{match.group(2)}***REDACTED***",
             text,
         )
+
+    def _argv(
+        self, command: PreparedEngineeringCommand, policy: WorkspacePathPolicy
+    ) -> list[str]:
+        if command.runnerKind == "powershell":
+            script = policy.resolve_existing(command.sourceRelativePath).absolute_path
+            return [
+                self._powershell_executable(),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script),
+            ]
+        if command.runnerKind in {"npm", "pnpm", "yarn"}:
+            executable = self._catalog.resolve_executable(command.runnerKind)
+            if executable is None:
+                raise EngineeringCommandError("ENGINEERING_PACKAGE_MANAGER_UNAVAILABLE")
+            if command.runnerKind == "npm" and command.commandId == "build":
+                return [executable, "run", "build"]
+            if command.runnerKind == "npm" and command.commandId == "test":
+                return [executable, "test"]
+            return [executable, "run", command.commandId]
+        if command.runnerKind == "python" and command.commandId == "test":
+            root = policy.resolve_directory(".").absolute_path
+            executable = self._catalog.python_executable(
+                root, command.workingRelativePath
+            )
+            if executable is None:
+                raise EngineeringCommandError("ENGINEERING_PYTHON_UNAVAILABLE")
+            return [executable, "-m", "pytest"]
+        raise EngineeringCommandError("ENGINEERING_COMMAND_NOT_ALLOWED")
+
+    def _is_regular_file(self, path: Path) -> bool:
+        try:
+            is_junction = getattr(path, "is_junction", None)
+            return (
+                path.is_file()
+                and not path.is_symlink()
+                and not bool(is_junction and is_junction())
+            )
+        except OSError:
+            return False
 
     def _powershell_executable(self) -> str:
         if self._powershell_override is not None:
